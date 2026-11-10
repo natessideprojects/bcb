@@ -1,0 +1,186 @@
+{
+ "tap": [
+  "/audio/sfx/tap-1.mp3",
+  "/audio/sfx/tap-2.mp3"
+ ],
+ "select": [
+  "/audio/sfx/select-1.mp3",
+  "/audio/sfx/select-2.mp3"
+ ],
+ "lock": [
+  "/audio/sfx/lock-1.mp3",
+  "/audio/sfx/lock-2.mp3"
+ ],
+ "flip": [
+  "/audio/sfx/flip-1.mp3",
+  "/audio/sfx/flip-2.mp3"
+ ],
+ "shuffle": [
+  "/audio/sfx/shuffle-1.mp3"
+ ],
+ "draw": [
+  "/audio/sfx/draw-1.mp3"
+ ],
+ "go": [
+  "/audio/sfx/go-1.mp3"
+ ],
+ "drive": [
+  "/audio/sfx/drive-1.mp3"
+ ],
+ "squeak": [
+  "/audio/sfx/squeak-1.mp3",
+  "/audio/sfx/squeak-2.mp3"
+ ],
+ "bash": [
+  "/audio/sfx/bash-1.mp3",
+  "/audio/sfx/bash-2.mp3",
+  "/audio/sfx/bash-3.mp3",
+  "/audio/sfx/bash-4.mp3"
+ ],
+ "bonk": [
+  "/audio/sfx/bonk-1.mp3",
+  "/audio/sfx/bonk-2.mp3",
+  "/audio/sfx/bonk-3.mp3"
+ ],
+ "bash-big": [
+  "/audio/sfx/bash-big-1.mp3",
+  "/audio/sfx/bash-big-2.mp3"
+ ],
+ "anvil": [
+  "/audio/sfx/anvil-1.mp3"
+ ],
+ "rusty-move": [
+  "/audio/sfx/rusty-move-1.mp3"
+ ],
+ "rusty-bash": [
+  "/audio/sfx/rusty-bash-1.mp3"
+ ],
+ "grease": [
+  "/audio/sfx/grease-1.mp3",
+  "/audio/sfx/grease-2.mp3"
+ ],
+ "tilt": [
+  "/audio/sfx/tilt-1.mp3",
+  "/audio/sfx/tilt-2.mp3"
+ ],
+ "dead": [
+  "/audio/sfx/dead-1.mp3"
+ ],
+ "ticket": [
+  "/audio/sfx/ticket-1.mp3"
+ ],
+ "ticket-lose": [
+  "/audio/sfx/ticket-lose-1.mp3"
+ ],
+ "lap": [
+  "/audio/sfx/lap-1.mp3"
+ ],
+ "chime": [
+  "/audio/sfx/chime-1.mp3",
+  "/audio/sfx/chime-2.mp3"
+ ],
+ "sparkle": [
+  "/audio/sfx/sparkle-1.mp3"
+ ],
+ "sign": [
+  "/audio/sfx/sign-1.mp3"
+ ],
+ "beep": [
+  "/audio/sfx/beep-1.mp3"
+ ],
+ "alarm": [
+  "/audio/sfx/alarm-1.mp3"
+ ],
+ "stall": [
+  "/audio/sfx/stall-1.mp3"
+ ],
+ "pileup": [
+  "/audio/sfx/pileup-1.mp3"
+ ],
+ "finish": [
+  "/audio/sfx/finish-1.mp3"
+ ],
+ "m01": [
+  "/audio/sfx/m01-1.mp3"
+ ],
+ "m01-grow": [
+  "/audio/sfx/m01-grow-1.mp3"
+ ],
+ "m02": [
+  "/audio/sfx/m02-1.mp3"
+ ],
+ "m03": [
+  "/audio/sfx/m03-1.mp3"
+ ],
+ "m04": [
+  "/audio/sfx/m04-1.mp3"
+ ],
+ "m05": [
+  "/audio/sfx/m05-1.mp3"
+ ],
+ "m06": [
+  "/audio/sfx/m06-1.mp3"
+ ],
+ "m07": [
+  "/audio/sfx/m07-1.mp3"
+ ],
+ "m08": [
+  "/audio/sfx/m08-1.mp3"
+ ],
+ "m09": [
+  "/audio/sfx/m09-1.mp3"
+ ],
+ "m10": [
+  "/audio/sfx/m10-1.mp3"
+ ],
+ "m11": [
+  "/audio/sfx/m11-1.mp3"
+ ],
+ "m12": [
+  "/audio/sfx/m12-1.mp3"
+ ],
+ "m13": [
+  "/audio/sfx/m13-1.mp3"
+ ],
+ "m14": [
+  "/audio/sfx/m14-1.mp3"
+ ],
+ "m15": [
+  "/audio/sfx/m15-1.mp3"
+ ],
+ "m16": [
+  "/audio/sfx/m16-1.mp3"
+ ],
+ "m17": [
+  "/audio/sfx/m17-1.mp3"
+ ],
+ "m18": [
+  "/audio/sfx/m18-1.mp3"
+ ],
+ "m19": [
+  "/audio/sfx/m19-1.mp3"
+ ],
+ "m20": [
+  "/audio/sfx/m20-1.mp3"
+ ],
+ "doubles": [
+  "/audio/sfx/doubles-1.mp3"
+ ],
+ "cheer": [
+  "/audio/sfx/cheer-1.mp3"
+ ],
+ "cheer-big": [
+  "/audio/sfx/cheer-big-1.mp3"
+ ],
+ "aww": [
+  "/audio/sfx/aww-1.mp3"
+ ],
+ "roar": [
+  "/audio/sfx/roar-1.mp3",
+  "/audio/sfx/roar-2.mp3",
+  "/audio/sfx/roar-3.mp3"
+ ],
+ "crowd": [
+  "/audio/sfx/crowd-1.mp3"
+ ]
+}
