@@ -95,11 +95,32 @@ class Referee {
     this.chain(p.id,c=>{switch(card.kind){
       case "M01":{const prior=pose(p);p.lane="mini";p.shrink=0;this.movement(p.id,prior,pose(p),true);if(p.pos&&this.occupied(p,p.pos))this.safe(p,p.pos,-this.g.direction,false);break;}
       case "M02":{
-        const rank=(v:Player)=>position(v,this.g.direction,this.size),progress=(v:Player)=>v.pos===0?0:this.g.direction>0?v.pos:this.size+1-v.pos;
-        const start=rank(p),leader=[...this.g.players].sort((a,b)=>rank(b)-rank(a))[0];
-        const distance=rank(leader)>start?(leader.lap-p.lap)*this.size+progress(leader)-progress(p)+1:1;
-        const targets=this.g.players.filter(o=>o.id!==p.id&&rank(o)>start&&rank(o)<=rank(leader)).sort((a,b)=>rank(a)-rank(b)||a.seat-b.seat);
-        this.travel(p,Math.max(1,distance),"lead",c);for(const target of targets)if(!c.hit.has(target.id))this.bash(target,p,c);break;
+        const direction=this.g.direction;
+        const rank=(driver:Player)=>position(driver,direction,this.size);
+        const progress=(driver:Player)=>driver.pos===0?0:direction>0?driver.pos:this.size+1-driver.pos;
+        const opponents=this.g.players.filter(driver=>driver.id!==p.id);
+        const ahead=opponents.filter(driver=>rank(driver)>rank(p));
+        let distance:number;
+        let targets:Player[];
+        if(ahead.length){
+          targets=ahead.sort((a,b)=>rank(a)-rank(b)||a.seat-b.seat);
+          const leader=targets[targets.length-1];
+          distance=(leader.lap-p.lap)*this.size+progress(leader)-progress(p)+1;
+        }else{
+          // A leader gets a full circuit. A driver sharing the starting section
+          // is passed at the end of that circuit, not at the start.
+          const forwardOffset=(driver:Player)=>this.wrap(progress(driver)-progress(p));
+          targets=opponents.sort((a,b)=>forwardOffset(a)-forwardOffset(b)||a.seat-b.seat);
+          distance=this.size+(p.pos===0?1:0);
+          let destination=this.wrap(p.pos===0?(direction>0?1:this.size):p.pos);
+          while(this.occupied(p,destination)){
+            distance++;
+            destination=this.wrap(destination+direction);
+          }
+        }
+        this.travel(p,Math.max(1,distance),"lead",c);
+        for(const target of targets)if(!c.hit.has(target.id))this.bash(target,p,c);
+        break;
       }
       case "M03":for(const target of this.ordered())this.travel(target,3,"forced",c);break;
       case "M04":for(const target of this.ordered())this.replace(target,1);break;

@@ -64,3 +64,36 @@ test("replay paths contain actual one-space travel and no future cards",()=>{con
 test("16-section reverse travel wraps at the arena Start Line",()=>{const g=makeGame(seats(),'day','relaxed',seeded(8),1000);g.condition='free';g.players[0].pos=1;g.players[1].pos=11;g.rusty=9;scenario(g,'M20','user0',seeded(2));scenario(g,'M03','user0',seeded(2));assert.equal(g.players[0].pos,14);assert.equal(g.players[0].lap,1);});
 test("Quick Race reserves replay time in addition to its pick allowance",()=>{const g=makeGame(seats(4),'day','quick',seeded(76),1000);const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,seeded(p.seat+20),1001);assert.equal(g.round,2);assert.ok(g.deadline>1001+60000);assert.ok(g.deadline<=1001+150000);});
 test("saved 3.3 games retain the original 28-space interpretation",()=>{const g=fresh();g.rules='3.3';delete g.trackLength;assert.equal(publicGame(g,'user0').trackLength,28);assert.equal(g.limit,3);const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,seeded(p.seat+12),1001);conserve(g);assert.equal(publicGame(g,'user0').rules,'3.3');});
+
+test("Lead Foot Bash gives the leader a full lap and passes every rival in either direction",()=>{
+  for(const direction of [1,-1] as const){
+    const game=fresh(3);
+    const [leader,first,second]=game.players;
+    game.condition="free";
+    game.direction=direction;
+    game.rusty=14;
+    Object.assign(leader,{pos:15,lap:1});
+    Object.assign(first,{pos:6,lap:0});
+    Object.assign(second,{pos:20,lap:0});
+    scenario(game,"M02",leader.id,()=>0);
+    assert.equal(leader.lap,2);
+    assert.equal(leader.pos,15);
+    assert.equal(leader.stats?.bashes,2);
+    assert.equal(first.pos,6-direction);
+    assert.equal(second.pos,20-direction);
+  }
+});
+
+test("Lead Foot Bash still moves a trailing driver one space past the leader",()=>{
+  const game=fresh(3);
+  const [driver,middle,leader]=game.players;
+  game.condition="free";
+  game.rusty=14;
+  Object.assign(driver,{pos:5,lap:0});
+  Object.assign(middle,{pos:10,lap:0});
+  Object.assign(leader,{pos:15,lap:0});
+  scenario(game,"M02",driver.id,()=>0);
+  assert.equal(driver.pos,16);
+  assert.equal(driver.lap,0);
+  assert.equal(driver.stats?.bashes,2);
+});
