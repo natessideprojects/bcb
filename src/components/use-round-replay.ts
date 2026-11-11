@@ -9,7 +9,7 @@ import type {PublicGame, ReplayEvent, RollPurpose, RoundReplay, Visual, Pose} fr
 import {CONDITIONS, EVENTS, type Condition, type EventId} from "@/lib/game/catalog";
 import {fairSound, type Part, type SfxName, type VoClip} from "@/lib/fair-audio";
 import {lines, rotate} from "@/lib/announcer";
-import {DICE_HOLD, DICE_TUMBLE, GO_BEAT, ROLL_WAIT, eventDuration} from "@/lib/game/presentation";
+import {DICE_HOLD, DICE_TUMBLE, GO_BEAT, KNOCK_PAUSE, ROLL_WAIT, eventDuration, knockDuration} from "@/lib/game/presentation";
 import {carRoute, miniRoute, rustyRoute, rustySlot, slotPoint, startPoint, travelPoint, type Pt} from "@/lib/game/rink";
 
 export type Motion = {x: number; y: number; face: 1 | -1; tilt: number; opacity?: number; scale?: number};
@@ -146,7 +146,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
 
     let started = false, rustyMoves = 0, lastBashVictim: string | null = null, lastKnock = false, rustyKnocked = false, diceSeq = 0, afterRustyRoll = false;
     let karma: string | null = null, slid: Extract<ReplayEvent, {type: "hazard"}> | null = null;
-    const drove = new Set<string>();
+    const drove = new Set<string>(), knockedBack = new Set<string>();
     const go = async () => {
       if (started) return true;
       started = true;
@@ -180,7 +180,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           return true;
         }
         case "travel": {
-          lastKnock = lastBashVictim === e.actor;
+          lastKnock = e.knock ?? lastBashVictim === e.actor;
           const steps = e.path.length - 1, last = e.path[steps];
           const knockedAway = e.actor === "rusty" && rustyKnocked;
           // (After Rusty's roll the caption already says how far he reverses.)
@@ -192,13 +192,18 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
             let verb = "moves";
             if (lastKnock) verb = karma === e.actor ? "rides the Karma forward" : "is knocked back";
             else if (slid?.actor === e.actor) verb = slid.kind === "grease" ? "slides" : slid.result === "back" ? "spins back" : "is flung forward";
-            else if (!drove.has(e.actor)) { verb = "drives"; drove.add(e.actor); say(named(e.actor), 1); }
+            else if (!drove.has(e.actor)) { verb = knockedBack.has(e.actor) ? "still takes their own move: drives" : "drives"; drove.add(e.actor); say(named(e.actor), 1); }
             call([{who: e.actor}, ` ${verb} ${secs(steps)}`]);
           }
           karma = null; slid = null; rustyKnocked = false;
           paint();
           if (!(await drive(e, knockedAway))) return false;
           if (lastKnock && !knockedAway && e.path.length - 1 >= 5) say("bash_far", 1);
+          if (lastKnock && e.actor !== "rusty") {
+            // Hold on the knocked-back car before anything else moves.
+            knockedBack.add(e.actor);
+            if (!(await wait(KNOCK_PAUSE))) return false;
+          }
           lastBashVictim = null;
           return true;
         }
@@ -417,7 +422,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
       const bay = (p: Pose) => (isRusty ? rustySlot(p.pos, length) : slotPoint(s, p.pos, p.lane, length));
       const from = bay(first), to = bay(last);
       const apply = (p: Pose) => { if (isRusty) view.rusty = p.pos; else view.players[actor] = {...p}; };
-      const duration = eventDuration(e) * pace();
+      const duration = (e.knock ? knockDuration(path.length - 1) : eventDuration(e)) * pace();
       state.spotlight = isRusty ? null : actor;
 
       if (e.teleport) {

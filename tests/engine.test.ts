@@ -256,3 +256,9 @@ test("the playback reserve waits for human dice only",()=>{
   const replay={round:1,initial:{players:{},rusty:1,direction:1 as const,condition:"free" as const,milestone:0},events:[{type:"roll" as const,purpose:"knockback" as const,rolls:[{actor:"bot",value:3}]},{type:"roll" as const,purpose:"rusty" as const,rolls:[{actor:"rusty",value:2}]},{type:"roll" as const,purpose:"tilt" as const,rolls:[{actor:"nate",value:5}]}]};
   assert.equal(replayBudget(replay,["nate"])-replayBudget(replay,[]),ROLL_WAIT);
 });
+test("knockbacks are marked so playback slows down and pauses on them",()=>{
+  const g=fresh(2);g.condition="free";g.rusty=20;const [a,b]=g.players;a.pos=1;b.pos=9;
+  const events=testMove(g,a.id,8,()=>.5);
+  const knock=events.find(e=>e.type==="travel"&&e.actor===b.id);assert.ok(knock?.type==="travel"&&knock.knock===true);
+  const own=events.find(e=>e.type==="travel"&&e.actor===a.id);assert.ok(own?.type==="travel"&&!own.knock);
+});

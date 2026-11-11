@@ -34,7 +34,7 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
     {type:"bash",actor:ME,victim:BIS,pos:6,lane:"main",by:ME},
     {type:"roll",purpose:"knockback",rolls:[{actor:BIS,value:2}]},
     {type:"pay",from:BIS,to:ME,paid:1,bank:0,totals:{[BIS]:2,[ME]:4}},
-    {type:"travel",actor:BIS,path:path(6,5,4)},
+    {type:"travel",actor:BIS,path:path(6,5,4),knock:true},
     {type:"travel",actor:BIS,path:path(4,5,6,7)},
     {type:"travel",actor:TAF,path:path(9,10)},
     {type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:3}]},
@@ -57,7 +57,7 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
     {type:"bash",actor:null,victim:TAF,pos:10,lane:"main",by:null},
     {type:"roll",purpose:"knockback",rolls:[{actor:TAF,value:3}]},
     {type:"pay",from:TAF,to:null,paid:1,bank:0,totals:{[TAF]:2}},
-    {type:"travel",actor:TAF,path:path(10,9,8,7)},
+    {type:"travel",actor:TAF,path:path(10,9,8,7),knock:true},
     {type:"card",actor:ME,kind:"M05"},
     {type:"card",actor:TAF,kind:"M13"},
     {type:"tickets",actor:TAF,delta:1,reason:"card",total:3},
@@ -69,7 +69,7 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
     {type:"bash",actor:TAF,victim:ME,pos:9,lane:"main",by:TAF},
     {type:"roll",purpose:"knockback",rolls:[{actor:ME,value:2}]},
     {type:"pay",from:ME,to:TAF,paid:1,bank:0,totals:{[ME]:3,[TAF]:4}},
-    {type:"travel",actor:ME,path:path(9,8,7)},
+    {type:"travel",actor:ME,path:path(9,8,7),knock:true},
     {type:"travel",actor:ME,path:path(7,8,9,10)},
     {type:"bash",actor:ME,victim:"rusty",pos:10,lane:"main",by:ME},
     {type:"tickets",actor:ME,delta:2,reason:"bounty",total:5},
@@ -117,7 +117,8 @@ const NARRATION:Record<number,Record<number,Bubble>>={
     5:{anchor:ME,title:"BASH!",text:"Taffy lands on you!"},
     6:{anchor:"dock",title:"Your knockback roll",text:"You were bashed, so you roll for knockback. Click your die (or press Next)."},
     7:{anchor:ME,text:"You rolled a 2, and you hand Taffy one of your tickets."},
-    9:{anchor:ME,text:"Now your boosted move: 1 + 2 = 3 sections… onto Rusty!"},
+    8:{anchor:ME,title:"Knocked back",text:"Here’s your knockback: your car rolls back 2 sections, from 9 to 7. Getting bashed doesn’t cost you your turn, though…"},
+    9:{anchor:ME,title:"Now your move",text:"…you still take your own move from where you landed. Your boosted 1 + 2 = 3 sections, from 7 to 10… right onto Rusty!"},
     11:{anchor:ME,title:"Rusty bounty",text:"Bashing Rusty pays you 2 tickets from the bank…"},
     12:{anchor:"rusty",text:"…and the hit sends Rusty careening half a lap across the rink."},
     15:{anchor:BIS,text:"Every completed lap pays a ticket at the end of the round. Biscuit gets one."},
@@ -252,7 +253,7 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
         </div>
       </section>
       <section className={`arena-dock ${bubble?.anchor==="dock"?"tutor-focus":""}`} aria-label="Your hand (tutorial)">
-        <div className="dock-status"><span className="eyebrow">{theater.active?`ROUND ${theater.round} ON THE RINK`:"YOUR HAND"} · DRIVER 1</span><strong>{theater.active?"Watch the rink!":chosen.length?"Locked in.":"Pick your speed."}</strong><span className="ticket-chip"><Ticket size={16}/>{me.tickets}<small>tickets</small></span><p>Higher cards move first. Land on a rival to bash them.</p></div>
+        <div className="dock-status"><span className="eyebrow">{theater.active?`ROUND ${theater.round} ON THE RINK`:"YOUR HAND"} · DRIVER 1</span><strong>{theater.active?"Watch the rink!":chosen.length?"Locked in.":"Pick your speed."}</strong><span className="ticket-chip"><Ticket size={16}/>{theater.active&&theater.tickets?theater.tickets[ME]??me.tickets:me.tickets}<small>tickets</small></span><p>Higher cards move first. Land on a rival to bash them.</p></div>
         <div className="dock-cards">
           <div className="speed-row">{hand.map((v,i)=><span key={i} className={`mini-speed ${chosen[0]===v?"chosen":""} ${chosen[1]===v?"extra":""}`} aria-label={`Speed ${v}`}><span className="corner">{v}</span><strong>{v}</strong><SpeedDial value={v}/></span>)}</div>
           <div className="midway-row">{held.map(c=><span key={c.id} className={`midway-chip ${EVENTS[c.kind].type.toLowerCase()} ${boost?"chosen":""}`}><EventArt kind={c.kind}/><span><b>{EVENTS[c.kind].name}</b><small>{boost?"Added to move":"Boost on your mat"}</small></span></span>)}{!held.length&&<p className="midway-empty">Match another driver’s card (Doubles) to win Midway cards.</p>}</div>
@@ -261,7 +262,7 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
       </section>
       <aside className="arena-rail">
         <section className="lineup" aria-label="The lineup"><h3>The lineup <span>tickets</span></h3>
-          {game.players.map(pl=>({pl,t:theater.active&&theater.tickets?theater.tickets[pl.id]??pl.tickets:pl.tickets})).sort((a,b)=>b.t-a.t||a.pl.seat-b.pl.seat).map(({pl,t})=>{const flag=game.lastReveal.findIndex(r=>r.id===pl.id)+1;return <article key={pl.id} className={`line-row ${pl.id===ME?"is-you":""} ${theater.spotlight===pl.id?"moving":""}`}><span className="line-car"><Car color={pl.color} width="38" height="40"/><i style={{background:pl.color}}>{pl.seat+1}</i>{flag?<b className={`line-flag ${flag===1?"first":""}`} title={`Flag ${flag} last round`}>F{flag}</b>:null}</span><div><strong>{pl.name}{pl.id===ME?" (you)":""}</strong><small><b className="driver-tag">Driver {pl.seat+1}</b> · Sec {pl.pos} · Lap {pl.lap}{flag===1?" · no draw":""}</small></div><b key={t} className={`line-score ${theater.active?"counting":""}`}>{t}</b></article>;})}
+          {game.players.map(pl=>({pl,t:theater.active&&theater.tickets?theater.tickets[pl.id]??pl.tickets:pl.tickets})).sort((a,b)=>b.t-a.t||a.pl.seat-b.pl.seat).map(({pl,t})=>{const flag=game.lastReveal.findIndex(r=>r.id===pl.id)+1;return <article key={pl.id} className={`line-row ${pl.id===ME?"is-you":""} ${theater.spotlight===pl.id?"moving":""}`}><span className="line-car"><Car color={pl.color} width="38" height="40"/><i style={{background:pl.color}}>{pl.seat+1}</i>{flag?<b className={`line-flag ${flag===1?"first":""}`} title={`Flag ${flag} last round`}>F{flag}</b>:null}</span><div><strong>{pl.name}{pl.id===ME?" (you)":""}</strong><small><b className="driver-tag">Driver {pl.seat+1}</b> · Sec {(theater.active&&theater.visual?.players[pl.id]||pl).pos} · Lap {(theater.active&&theater.visual?.players[pl.id]||pl).lap}{flag===1?" · no draw":""}</small></div><b key={t} className={`line-score ${theater.active?"counting":""}`}>{t}</b></article>;})}
         </section>
         <section className="tutor-cheats"><h3>Cheat sheet</h3><ul>
           <li><b>Speed Card</b> = sections you move. Highest goes first.</li>

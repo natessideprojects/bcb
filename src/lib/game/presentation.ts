@@ -9,10 +9,13 @@ export const GO_BEAT = 2900;
 export const DICE_TUMBLE = 1000, DICE_HOLD = 1100;
 /** How long a driver gets to click their own die before it rolls itself (ms). */
 export const ROLL_WAIT = 6000;
+/** A knockback drives a little slower, then holds so it's clear why the car went backwards. */
+export const KNOCK_MIN = 1400, KNOCK_PAUSE = 900;
 export function travelDuration(steps: number, teleport?: boolean) {
   if (teleport) return 700;
   return Math.min(3800, Math.max(950, steps * 330));
 }
+export const knockDuration = (steps: number) => Math.max(KNOCK_MIN, travelDuration(steps));
 export function eventDuration(e: ReplayEvent): number {
   switch (e.type) {
     case "reveal": return 950 + (e.boost ? 450 : 0) + (e.extra ? 300 : 0);
@@ -22,7 +25,7 @@ export function eventDuration(e: ReplayEvent): number {
     case "bash": return 2300;
     case "pay": return 1500;
     case "draw": return 120;
-    case "travel": return Math.max(travelDuration(e.path.length - 1, e.teleport), e.actor === "rusty" && !e.teleport ? 3350 : 0);
+    case "travel": return e.knock ? knockDuration(e.path.length - 1) + KNOCK_PAUSE : Math.max(travelDuration(e.path.length - 1, e.teleport), e.actor === "rusty" && !e.teleport ? 3350 : 0);
     case "hazard": return e.kind === "tilt" ? 2300 : e.kind === "dead" ? 2700 : 3400;
     case "lap": return 3300;
     case "tickets": return 1100;
