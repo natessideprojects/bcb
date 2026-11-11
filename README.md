@@ -29,6 +29,15 @@ New races use a 16-section rink (hidden per-colour car routes plus the mini-trac
 
 Quick races have a 60-second pick allowance plus an automatically calculated presentation buffer for the preceding server-resolved replay. Friends races retain 24 hours. The client can speed up or skip the show; animations never decide the game result. Structured replay events contain only public card reveals, actual travel paths, bashes, card actions and draw counts.
 
-Profiles and result receipts live in Postgres. Final scores, wallet awards, statistics and standings are credited in the same transaction as a finished race, with a unique room/player receipt preventing duplicate awards. Only completed 3.4 races count. Synthetic QA accounts are excluded from standings. The current ladder is a playtest points table; private bot practice counts and this is not skill matchmaking. The Prize Booth is a future cosmetic preview with no spending or payments.
+Profiles and result receipts live in Postgres. Final scores, wallet awards, statistics and standings are credited in the same transaction as a finished race, with a unique room/player receipt preventing duplicate awards. Only completed 3.4 races count. Synthetic QA accounts are excluded from standings. The current ladder is a playtest points table; private bot practice counts and this is not skill matchmaking. The Prize Booth exchanges earned tickets for cosmetic skins and passengers; there are no money payments.
 
 Audio is hosted with the game: Nathan-supplied Fairground Fun music, crowd recordings and ElevenLabs announcer clips, with trimmed FilmCow effects. Sound effects source: https://filmcow.itch.io/filmcow-sfx. No paid generator or recurring audio API is required. Sound begins only after the player's explicit enable gesture. Music, effects, voice and animation speed are separately adjustable; hiding the tab pauses the sound and skips the visual replay. Reduced motion defaults to no animation.
+
+
+## Player mat and Prize Booth release
+
+Every driver in a new room first claims one saved starter card, usable in round 1. Additional interactive Midway draws happen after movement: click the stack, reveal and hear the card, then place it on the mat. Instant cards resolve on placement; saved cards can be opened to inspect or selected for a BOOST. All pending draws settle before final scoring. Bots and expired turns place cards automatically. Existing saved races retain their prior automatic-draw behavior.
+
+The store at /shop has 30 skins (six free colors plus 24 ticket prizes) and 12 passengers. Preview combinations before spending. Purchases are server-priced, serialized under a profile lock and recorded once. Equipped looks appear in newly started races. Run db:setup for the additive inventory/equipment migration when setting up another environment. See PRIZE-BOOTH-DESIGN.md for card ordering, source research and future cosmetic effects.
+
+Validation includes 100 legacy and 100 interactive complete-game simulations, all 20 event actions, genuine multiplayer authentication/privacy/scoring, free equipment and purchase rejection checks. scripts/smoke-shop.mjs additionally funds ONLY an existing synthetic QA account, then tests concurrent paid-ticket purchases and race loadouts. Never run that test with a real user account.

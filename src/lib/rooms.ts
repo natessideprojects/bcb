@@ -2,10 +2,10 @@ import {randomBytes,randomInt,randomUUID} from "node:crypto";
 import {db} from "./db";
 import {ensureProfile,creditFinished} from "./profiles";
 import {DEFAULT_POLICY,PAINTS,type MapId} from "./game/catalog";
-import {advanceGame,GameError,makeGame,publicGame,submitPick,type Game,type Pick} from "./game/engine";
+import {advanceGame,midwayAction,GameError,makeGame,publicGame,submitPick,type Game,type Pick} from "./game/engine";
 import type {Policy} from "./game/catalog";
 
-export type Seat={id:string;name:string;bot:boolean;ready:boolean};
+export type Seat={skin?:string;mascot?:string|null;id:string;name:string;bot:boolean;ready:boolean};
 export type RoomState={map:MapId;pace:"quick"|"relaxed";seats:Seat[];banned:string[];game:Game|null};
 export type RoomRow={id:string;code:string;host_id:string;player_ids:string[];status:"lobby"|"playing"|"finished"|"closed";revision:number;state:RoomState;created_at:Date;updated_at:Date};
 export type User={id:string;name:string;isTest?:boolean};
@@ -30,7 +30,7 @@ export async function createRoom(user:User,map:MapId,pace:"quick"|"relaxed"){
   const profile=await ensureProfile(user);user={...user,name:profile.driver_name};
   const count=await db`SELECT count(*)::int AS n FROM bcb_rooms WHERE host_id=${user.id} AND status IN ('lobby','playing')`;
   if(count[0].n>=5)throw new HttpError(409,"You already host five open rooms. Close one before creating another.");
-  const state:RoomState={map,pace,seats:[{id:user.id,name:cleanName(user.name),bot:false,ready:true}],banned:[],game:null};
+  const state:RoomState={map,pace,seats:[{id:user.id,name:cleanName(user.name),bot:false,ready:true,skin:profile.equipped_skin,mascot:profile.equipped_mascot}],banned:[],game:null};
   const rows=await db<RoomRow[]>`INSERT INTO bcb_rooms (id,code,host_id,player_ids,state) VALUES (${randomUUID()},${randomBytes(8).toString("hex").toUpperCase()},${user.id},${[user.id]},${db.json(state as never)}) RETURNING *`;
   await db`DELETE FROM bcb_limits WHERE expires_at<now()`;
   return roomPublic(rows[0],user.id);
@@ -44,7 +44,7 @@ export async function joinRoom(user:User,code:string){
     if(r.player_ids.includes(user.id))return roomPublic(r,user.id);
     if(r.status!=="lobby")throw new HttpError(409,"This race has started. Ask your friend to create the next one.");
     if(r.state.seats.length>=6)throw new HttpError(409,"This room already has six drivers.");
-    r.state.seats.push({id:user.id,name:cleanName(user.name),bot:false,ready:false});r.player_ids.push(user.id);r.revision++;
+    r.state.seats.push({id:user.id,name:cleanName(user.name),bot:false,ready:false,skin:profile.equipped_skin,mascot:profile.equipped_mascot});r.player_ids.push(user.id);r.revision++;
     await tx`UPDATE bcb_rooms SET state=${tx.json(r.state as never)},player_ids=${r.player_ids},revision=${r.revision},updated_at=now() WHERE id=${r.id}`;
     return roomPublic(r,user.id);
   });
@@ -52,10 +52,10 @@ export async function joinRoom(user:User,code:string){
 export async function readRoom(user:string,id:string){
   const rows=await db<RoomRow[]>`SELECT * FROM bcb_rooms WHERE id=${id} AND ${user}=ANY(player_ids)`;
   const r=rows[0];if(!r)throw new HttpError(404,"This room is unavailable to your account. Join using its invitation link.");
-  if(r.status==="playing"&&r.state.game&&(r.state.game.deadline<=Date.now()||!r.state.game.players.some(p=>p.active&&!r.state.game!.picks[p.id])))return mutateRoom(user,id,{action:"tick"});
+  if(r.status==="playing"&&r.state.game&&(r.state.game.deadline<=Date.now()||(r.state.game.phase==="pick"&&!r.state.game.players.some(p=>p.active&&!r.state.game!.picks[p.id]))))return mutateRoom(user,id,{action:"tick"});
   return roomPublic(r,user);
 }
-export type Command={action:"ready";ready:boolean}|{action:"bot"}|{action:"remove";playerId:string}|{action:"start"}|{action:"pick";pick:Pick;round:number}|{action:"policy";policy:Policy}|{action:"close"}|{action:"tick"};
+export type Command={action:"ready";ready:boolean}|{action:"bot"}|{action:"remove";playerId:string}|{action:"start"}|{action:"pick";pick:Pick;round:number}|{action:"policy";policy:Policy}|{action:"close"}|{action:"drawMidway";round:number}|{action:"placeMidway";round:number;cardId:string}|{action:"tick"};
 export async function mutateRoom(user:string,id:string,command:Command){
   return db.begin(async tx=>{
     const rows=await tx<RoomRow[]>`SELECT * FROM bcb_rooms WHERE id=${id} AND ${user}=ANY(player_ids) FOR UPDATE`;
@@ -67,8 +67,9 @@ export async function mutateRoom(user:string,id:string,command:Command){
       case "ready":lobby();r.state.seats.find(p=>p.id===user)!.ready=command.ready;break;
       case "bot":host();lobby();if(r.state.seats.length>=6)throw new HttpError(409,"Six drivers is the room limit.");r.state.seats.push({id:"bot-"+randomUUID(),name:["Penny","Ace","Tilly","Sparky","Wally"][r.state.seats.filter(p=>p.bot).length],bot:true,ready:true});break;
       case "remove":{host();lobby();if(command.playerId===user)throw new HttpError(400,"The host must stay in the room.");const seat=r.state.seats.find(p=>p.id===command.playerId);if(!seat)throw new HttpError(404,"Driver not found.");r.state.seats=r.state.seats.filter(p=>p.id!==command.playerId);r.player_ids=r.player_ids.filter(p=>p!==command.playerId);if(!seat.bot)r.state.banned.push(seat.id);break;}
-      case "start":host();lobby();if(r.state.seats.some(p=>!p.ready))throw new HttpError(409,"Wait for every driver to ready up.");r.state.game=makeGame(r.state.seats,r.state.map,r.state.pace,rng);r.status=r.state.game.phase==="finished"?"finished":"playing";break;
+      case "start":host();lobby();if(r.state.seats.some(p=>!p.ready))throw new HttpError(409,"Wait for every driver to ready up.");for(const seat of r.state.seats.filter(s=>!s.bot)){const p=await tx`SELECT equipped_skin,equipped_mascot FROM bcb_profiles WHERE user_id=${seat.id}`;if(p[0]){seat.skin=p[0].equipped_skin;seat.mascot=p[0].equipped_mascot;}}r.state.game=makeGame(r.state.seats,r.state.map,r.state.pace,rng,Date.now(),{manualMidway:true,starterMidway:true});r.status=r.state.game.phase==="finished"?"finished":"playing";break;
       case "pick":if(!r.state.game||r.status!=="playing")throw new HttpError(409,"There is no active round.");advanceGame(r.state.game,rng);submitPick(r.state.game,user,command.pick,command.round,rng);if(r.state.game.phase==="finished")r.status="finished";break;
+      case "drawMidway":case "placeMidway":if(!r.state.game||r.status!=="playing")throw new HttpError(409,"There is no active race.");midwayAction(r.state.game,user,command.round,command.action==="drawMidway"?"reveal":"place",command.action==="placeMidway"?command.cardId:undefined,rng);if(r.state.game.phase==="finished")r.status="finished";break;
       case "policy":{if(!r.state.game||r.status!=="playing")throw new HttpError(409,"There is no active race.");if(r.state.game.players.some(p=>!p.bot&&r.state.game!.picks[p.id]))throw new HttpError(409,"A driver has locked in. Change responses before the next round's first pick.");r.state.game.players.find(p=>p.id===user)!.policy=command.policy;break;}
       case "close":host();r.status="closed";break;
       case "tick":if(r.state.game&&r.status==="playing"){advanceGame(r.state.game,rng);if(r.state.game.phase==="finished")r.status="finished";}break;

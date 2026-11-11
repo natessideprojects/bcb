@@ -120,7 +120,7 @@ export function Board({game: g, userId, visual, motion = {}, fx = [], shake, spo
               {you && <ellipse cx="0" cy="1" rx={30 * s} ry={11 * s} className="you-ring"/>}
               <ellipse cx="0" cy="2" rx={24 * s} ry={8 * s} className="car-shadow"/>
               <g className={shake === id ? "shake" : ""}>
-                <g transform={`rotate(${at.tilt}) scale(${at.face === 1 ? -s : s} ${s})`}><Car color={p.color} x={-29} y={-57} width={58} height={64} aria-label={`${p.name}, ${pose.pos === 0 ? "Start Grid" : `section ${pose.pos}`}${mini ? ", mini-track" : ""}`}/></g>
+                <g transform={`rotate(${at.tilt}) scale(${at.face === 1 ? -s : s} ${s})`}><Car skin={p.skin} mascot={p.mascot} color={p.color} x={-29} y={-57} width={58} height={64} aria-label={`${p.name}, ${pose.pos === 0 ? "Start Grid" : `section ${pose.pos}`}${mini ? ", mini-track" : ""}`}/></g>
               </g>
               <g transform={`translate(${20 * s} ${-6 * s})`} className="seat-badge"><circle r="9" fill={p.color}/><text y="4">{p.seat + 1}</text></g>
               {you && <text x="0" y={-58 * s} className="you-tag">YOU</text>}

@@ -35,7 +35,7 @@ let fxSeq = 0;
 
 export function useRoundReplay(game: PublicGame | undefined, userId: string) {
   const [show, setShow] = useState<Theater>(idle);
-  const token = useRef(0), previous = useRef<number | null>(null), latest = useRef(game), tickets = useRef<Record<string, number>>({});
+  const token = useRef(0), previous = useRef<string | null>(null), latest = useRef(game), tickets = useRef<Record<string, number>>({});
   latest.current = game;
 
   const cutoff = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -219,7 +219,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
       if (!(await wait((fairSound.length(winners.length > 1 ? "end_tie" : lines.win(colour(winners[0]))) + 150) / pace()))) return;
       say(winners.includes(userId) ? "end_you_win" : "end_you_lose", 3);
       if (!winners.includes(userId)) sfx("aww", {delay: 900, volume: 0.6});
-    } else if (final) {
+    } else if (final?.phase === "pick") {
       const leader = (t: Record<string, number>) => {
         const top = Math.max(...Object.values(t)), ids = Object.keys(t).filter(id => t[id] === top);
         return ids.length === 1 ? ids[0] : null;
@@ -312,11 +312,11 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
     if (!game) return;
     const before = tickets.current;
     tickets.current = Object.fromEntries(game.players.map(p => [p.id, p.tickets]));
-    if (previous.current === null) { previous.current = game.replay?.round ?? 0; return; }
+    if (previous.current === null) { previous.current = `${game.replay?.round ?? 0}:${game.replay?.sequence ?? 0}`; return; }
     const was = previous.current;
-    previous.current = game.replay?.round ?? 0;
-    if (game.replay && game.replay.round > was && fairSound.get().animation !== "off") void run(game.replay, before);
-  }, [game?.round, game?.replay?.round, run]); // eslint-disable-line react-hooks/exhaustive-deps
+    previous.current = `${game.replay?.round ?? 0}:${game.replay?.sequence ?? 0}`;
+    if (game.replay && `${game.replay.round}:${game.replay.sequence ?? 0}` !== was && fairSound.get().animation !== "off") void run(game.replay, before);
+  }, [game?.round, game?.replay?.round, game?.replay?.sequence, run]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const hidden = () => { if (document.hidden) skip(); };

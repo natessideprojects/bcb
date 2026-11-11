@@ -3,6 +3,7 @@ import type {Metadata,Viewport} from "next";
 import "./globals.css";
 import "./fairground.css";
 import "./arena.css";
+import "./prizes.css";
 import localFont from "next/font/local";
 const bungee=localFont({src:"../../public/fonts/Bungee-Regular.ttf",variable:"--font-carnival",display:"swap"});
 const fredoka=localFont({src:"../../public/fonts/Fredoka.ttf",variable:"--font-friendly",display:"swap"});

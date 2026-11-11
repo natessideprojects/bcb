@@ -32,5 +32,8 @@ try{
     created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(room_id,user_id)
   )`;
   await sql`CREATE INDEX IF NOT EXISTS bcb_rankings_idx ON bcb_profiles(points DESC,wins DESC,earned_tickets DESC)`;
+  await sql`ALTER TABLE bcb_profiles ADD COLUMN IF NOT EXISTS equipped_skin text NOT NULL DEFAULT 'standard-red'`;
+  await sql`ALTER TABLE bcb_profiles ADD COLUMN IF NOT EXISTS equipped_mascot text`;
+  await sql`CREATE TABLE IF NOT EXISTS bcb_inventory (user_id text NOT NULL REFERENCES bcb_profiles(user_id), item_id text NOT NULL, price integer NOT NULL CHECK(price>=0), created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id,item_id))`;
   console.log('Private rooms, profiles, results and indexes are ready.');
 }finally{await sql.end();}

@@ -9,17 +9,18 @@ export type Pt = {x: number; y: number};
 export type Lane = "main" | "mini";
 
 export const CENTER: Pt = {x: 500, y: 386};
-type Box = {hw: number; hh: number; r: number};
-export const FLOOR: Box = {hw: 452, hh: 286, r: 168};     // inside the light ring
+type Box = {hw: number; hh: number; r: number; topRadius?: number};
+export const FLOOR: Box = {hw: 460, hh: 292, r: 282, topRadius: 214};     // inside the light ring
 export const ISLAND: Box = {hw: 165, hh: 84, r: 70};       // centre island with the Rink Sign
 export const MINI: Box = {hw: 218, hh: 128, r: 108};       // outer edge of the mini-track ("daddy path")
 
 const TAU = Math.PI * 2;
 const inside = (b: Box, x: number, y: number) => {
   const dx = Math.abs(x - CENTER.x), dy = Math.abs(y - CENTER.y);
+  const radius = y < CENTER.y ? b.topRadius ?? b.r : b.r;
   if (dx > b.hw || dy > b.hh) return false;
-  if (dx <= b.hw - b.r || dy <= b.hh - b.r) return true;
-  return (dx - (b.hw - b.r)) ** 2 + (dy - (b.hh - b.r)) ** 2 <= b.r * b.r;
+  if (dx <= b.hw - radius || dy <= b.hh - radius) return true;
+  return (dx - (b.hw - radius)) ** 2 + (dy - (b.hh - radius)) ** 2 <= radius * radius;
 };
 const tables = new Map<Box, Float64Array>();
 const SAMPLES = 1440;
@@ -174,7 +175,8 @@ export function wedgePath(n: number, length: number): string {
 /** Rounded-box outline as an SVG path. */
 export function boxPath(b: Box): string {
   const {hw, hh, r} = b, x0 = CENTER.x - hw, x1 = CENTER.x + hw, y0 = CENTER.y - hh, y1 = CENTER.y + hh;
-  return `M${x0 + r} ${y0}H${x1 - r}A${r} ${r} 0 0 1 ${x1} ${y0 + r}V${y1 - r}A${r} ${r} 0 0 1 ${x1 - r} ${y1}H${x0 + r}A${r} ${r} 0 0 1 ${x0} ${y1 - r}V${y0 + r}A${r} ${r} 0 0 1 ${x0 + r} ${y0}Z`;
+  const t=b.topRadius??r;
+  return `M${x0 + t} ${y0}H${x1 - t}A${t} ${t} 0 0 1 ${x1} ${y0 + t}V${y1 - r}A${r} ${r} 0 0 1 ${x1 - r} ${y1}H${x0 + r}A${r} ${r} 0 0 1 ${x0} ${y1 - r}V${y0 + t}A${t} ${t} 0 0 1 ${x0 + t} ${y0}Z`;
 }
 /** Label anchor near the outer wall for section n. */
 export function labelPoint(n: number, length: number, inset = 26): Pt {

@@ -76,7 +76,7 @@ export function ReplayScene({show, game}: {show: Theater; game: PublicGame}) {
       {b?.kind === "stall" && (
         <div className="callout stall" role="status">
           <span className="smoke-icon" aria-hidden="true"/>
-          <span><strong>{b.pileup ? "Pile-up!" : "Stalled out!"}</strong>{name(b.actor)} · roll 4–6 next round to escape</span>
+          <span><strong>{b.pileup ? "Pile-up!" : "Stalled out!"}</strong>{name(b.actor)} · automatic escape check next round: 4–6</span>
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ import {SFX, VO, type SfxName, type VoClip} from "./audio-manifest";
 
 export type FairSettings = {enabled: boolean; music: number; effects: number; voice: number; animation: "normal" | "fast" | "off"};
 export type {SfxName, VoClip};
+export const FAIRGROUND_MUSIC = {title:"Fairground Fun",src:"/audio/music/fairground-fun.mp3"} as const;
 const KEY = "bcb.fair-settings.v1";
 const defaults: FairSettings = {enabled: false, music: 0.2, effects: 0.7, voice: 0.9, animation: "normal"};
 let settings: FairSettings = {...defaults}, loaded = false;
@@ -52,8 +53,7 @@ const voUrl = (clip: VoClip) => `/audio/vo/${clip}.mp3`;
 const audible = (level: number) => settings.enabled && level > 0 && typeof document !== "undefined" && !document.hidden;
 
 function syncMusic() {
-  if (typeof window === "undefined") return;
-  if (!music) { music = new Audio("/audio/music/fairground-fun.mp3"); music.loop = true; music.preload = "none"; }
+  if (!music) return;
   volumes();
   if (audible(settings.music)) void music.play().catch(() => {});
   else music.pause();
@@ -96,6 +96,7 @@ function endVoice(v: Voice) {
 }
 
 export const fairSound = {
+  bindMusic(element:HTMLAudioElement|null) { if(music!==element)music?.pause(); music=element; syncMusic(); },
   get: () => settings,
   server: () => defaults,
   subscribe(fn: () => void) { listeners.add(fn); return () => { listeners.delete(fn); }; },

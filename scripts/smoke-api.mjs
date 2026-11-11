@@ -11,7 +11,7 @@ class Driver{
   async call(url,body,origin=base){
     const res=await fetch(base+url,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'content-type':'application/json',origin}),'cookie':[...this.jar].map(([k,v])=>`${k}=${v}`).join('; ')},body:body===undefined?undefined:JSON.stringify(body),redirect:'manual'});
     for(const c of res.headers.getSetCookie()){const first=c.split(';')[0],i=first.indexOf('=');const k=first.slice(0,i),v=first.slice(i+1);if(v)this.jar.set(k,v);else this.jar.delete(k);}
-    const data=await res.json().catch(()=>null);return {status:res.status,data};
+    const data=await res.json().catch(()=>null);if(res.status===429){await new Promise(r=>setTimeout(r,5000));return this.call(url,body,origin);}return {status:res.status,data};
   }
   async signup(){const r=await this.call('/api/auth/sign-up/email',{email:this.email,password:this.password,name:this.name});if(r.status!==200)throw Error(`Signup HTTP ${r.status}: ${r.data?.code||r.data?.error?.code||r.data?.message||'not successful'}`);const s=await this.call('/api/auth/get-session');assert.ok(s.data?.user?.id,'New account must have a genuine signed-in session');this.id=s.data.user.id;}
 }
@@ -34,6 +34,10 @@ await b.call('/api/rooms/'+id,{action:'ready',ready:true});
 await a.call('/api/rooms/'+id,{action:'bot'});
 r=await a.call('/api/rooms/'+id,{action:'start'});assert.equal(r.status,200);assert.equal(r.data.room.status,'playing');
 console.log('PASS: invite join, membership privacy, ready-up and host-only start');
+while(r.data.room.game.phase==='midway'&&r.data.room.game.midway.starter){const owner=r.data.room.game.midway.actor,p=owner===a.id?a:b;assert.ok(owner===a.id||owner===b.id);const reveal=await p.call('/api/rooms/'+id,{action:'drawMidway',round:1});assert.equal(reveal.status,200);const card=reveal.data.room.game.me.drawn;assert.ok(['M05','M09','M10','M11','M12','M16','M17'].includes(card.kind));r=await p.call('/api/rooms/'+id,{action:'placeMidway',round:1,cardId:card.id});assert.equal(r.status,200);}
+r=await a.call('/api/rooms/'+id);assert.equal(r.data.room.game.round,1);assert.equal(r.data.room.game.me.held.length,1);assert.equal(r.data.room.game.me.held[0].available,1);
+console.log('PASS: manual starter claim, saved card ownership and round-one availability');
+
 let av=r.data.room,bv=(await b.call('/api/rooms/'+id)).data.room;
 assert.ok(!('hand' in av.game.players.find(p=>p.id===b.id)));
 assert.ok(!('picks' in av.game));assert.ok(!('speedDeck' in av.game));
@@ -44,17 +48,17 @@ const first=await a.call('/api/rooms/'+id,{action:'pick',round,pick:{primary:pa}
 bv=(await b.call('/api/rooms/'+id)).data.room;assert.ok(bv.game.players.find(p=>p.id===a.id).locked);assert.ok(!JSON.stringify(bv).includes('"'+pa+'"'));
 const duplicate=await a.call('/api/rooms/'+id,{action:'pick',round,pick:{primary:pa}});assert.equal(duplicate.status,200);assert.equal(duplicate.data.room.game.round,round);
 const results=await Promise.all([b.call('/api/rooms/'+id,{action:'pick',round,pick:{primary:pb}}),b.call('/api/rooms/'+id,{action:'pick',round,pick:{primary:pb}})]);assert.ok(results.some(r=>r.status===200));assert.ok(results.every(r=>r.status===200||r.status===409));
-av=(await a.call('/api/rooms/'+id)).data.room;assert.equal(av.game.round,round+1);assert.equal(av.game.lastReveal.length,3);
+av=(await a.call('/api/rooms/'+id)).data.room;assert.equal(av.game.round,av.game.phase==='midway'?round:round+1);assert.equal(av.game.lastReveal.length,3);
 console.log('PASS: foreign-card rejection, hidden locked picks, duplicate submits and one atomic round');
-for(let turns=0;turns<45&&av.status!=='finished';turns++){
-  for(const p of [a,b]){const current=(await p.call('/api/rooms/'+id));assert.equal(current.status,200);const room=current.data.room,g=room.game;if(room.status==='finished'){av=room;break;}const player=g.players.find(x=>x.id===p.id);if(player.active&&!player.locked){const q=await p.call('/api/rooms/'+id,{action:'pick',round:g.round,pick:{primary:g.me.hand[0].id}});assert.equal(q.status,200);av=q.data.room;}}
+for(let turns=0;turns<160&&av.status!=='finished';turns++){
+  for(const p of [a,b]){const current=(await p.call('/api/rooms/'+id));assert.equal(current.status,200);const room=current.data.room,g=room.game;if(room.status==='finished'){av=room;break;}if(g.phase==='midway'){if(g.midway.actor===p.id){const reveal=await p.call('/api/rooms/'+id,{action:'drawMidway',round:g.round});assert.equal(reveal.status,200);assert.ok(reveal.data.room.game.me.drawn);const drawn=reveal.data.room.game.me.drawn;const hidden=(await (p===a?b:a).call('/api/rooms/'+id));assert.equal(hidden.data.room.game.me.drawn,null);const placed=await p.call('/api/rooms/'+id,{action:'placeMidway',round:g.round,cardId:drawn.id});assert.equal(placed.status,200);av=placed.data.room;}continue;}const player=g.players.find(x=>x.id===p.id);if(player.active&&!player.locked){const q=await p.call('/api/rooms/'+id,{action:'pick',round:g.round,pick:{primary:g.me.hand[0].id}});assert.equal(q.status,200);av=q.data.room;}}
 }
 assert.equal(av.status,'finished');assert.ok(av.game.winners.length);
 const before=(await a.call('/api/auth/sign-out',{}));assert.equal(before.status,200);assert.equal((await a.call('/api/rooms')).status,401);
 const signin=await a.call('/api/auth/sign-in/email',{email:a.email,password:a.password});assert.equal(signin.status,200);const restored=await a.call('/api/rooms/'+id);assert.equal(restored.status,200);assert.equal(restored.data.room.status,'finished');assert.deepEqual(restored.data.room.game.winners,av.game.winners);
 console.log('PASS: complete multiplayer game, scoring, sign-out, sign-in, and saved race recovery');
 
-assert.equal((await anonymous.call('/api/profile')).status,401);
+assert.equal((await anonymous.call('/api/profile')).status,401);assert.equal((await anonymous.call('/api/shop')).status,401);const emptyShop=(await outsider.call('/api/shop')).data.shop;assert.equal(emptyShop.owned.length,6);assert.equal(emptyShop.wallet,0);assert.equal((await outsider.call('/api/shop',{action:'buy',itemId:'rocket'})).status,409);assert.equal((await outsider.call('/api/shop',{action:'equip',itemId:'rocket'})).status,409);const freeEquip=await outsider.call('/api/shop',{action:'equip',itemId:'standard-purple'});assert.equal(freeEquip.data.shop.skin,'standard-purple');assert.equal(freeEquip.data.shop.wallet,0);assert.equal((await outsider.call('/api/shop',{action:'buy',itemId:'rocket',price:0})).status,400);console.log('PASS: free colors, saved equip, insufficient funds and unowned-item/price-tampering rejection');
 const profile=(await a.call('/api/profile')).data.profile;
 assert.equal(profile.races,1);assert.equal(profile.recent.length,1);
 const mine=av.game.players.find(p=>p.id===a.id),won=av.game.winners.includes(a.id);

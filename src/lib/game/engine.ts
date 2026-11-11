@@ -7,15 +7,15 @@ export type Pick={primary:string;extra?:string;boost?:string};
 export type Pose={pos:number;lap:number;lane:"main"|"mini"};
 export type Visual={players:Record<string,Pose>;rusty:number;direction:1|-1;condition:Condition;milestone:number};
 export type ReplayEvent={type:"travel";actor:string;path:Pose[];teleport?:boolean}|{type:"bash";actor:string|null;victim:string;pos:number;lane:"main"|"mini"}|{type:"reveal";actor:string;value:number;extra?:number;boost?:EventId}|{type:"doubles";actors:string[];value:number}|{type:"card";actor:string;kind:EventId}|{type:"draw";actor:string;count:number;reason:string}|{type:"hazard";actor:string;kind:"grease"|"tilt"|"dead";pos:number;lane:"main"|"mini";roll?:number;result:"slide"|"forward"|"back"|"stay"|"paid"|"skip"}|{type:"lap";actor:string;delta:number}|{type:"tickets";actor:string;delta:number;reason:"bash"|"bounty"|"dead"|"card"|"prize"}|{type:"condition";condition:Condition}|{type:"stall";actor:string;pos:number;pileup:boolean};
-export type RoundReplay={round:number;initial:Visual;events:ReplayEvent[]};
+export type RoundReplay={sequence?:number;round:number;initial:Visual;events:ReplayEvent[]};
 export function replayBudget(replay:RoundReplay|undefined){if(!replay)return 0;return Math.min(90000,GO_BEAT+5000+replay.events.reduce((ms,e)=>ms+eventDuration(e),0));}
 export const trackSize=(g:{trackLength?:number})=>g.trackLength||28;
 export const gameMap=(g:{trackLength?:number;map:MapId})=>trackSize(g)===16?(g.map==="day"?{...MAPS.day,grease:[3,11],tilt:[5,13],dead:[8,16]}:{...MAPS.night,grease:[4,12],tilt:[7,15],dead:[1,9]}):trackSize(g)===18?(g.map==="day"?{...MAPS.day,grease:[3,12],tilt:[6,15],dead:[9,18]}:{...MAPS.night,grease:[4,13],tilt:[7,16],dead:[1,10]}):MAPS[g.map];
 const pose=(p:Pose):Pose=>({pos:p.pos,lap:p.lap,lane:p.lane});
 const visual=(g:Game):Visual=>({players:Object.fromEntries(g.players.map(p=>[p.id,pose(p)])),rusty:g.rusty,direction:g.direction,condition:g.condition,milestone:g.milestone});
-export type Player={id:string;name:string;seat:number;color:string;bot:boolean;pos:number;lap:number;lane:"main"|"mini";tickets:number;hand:Speed[];held:Midway[];skip:boolean;stalled:boolean;shrink:number;compelled:boolean;active:boolean;policy:Policy;misses:number;stats?:{bashes:number;doubles:number;laps:number}};
+export type Player={skin?:string;mascot?:string|null;lastMidway?:Midway[];id:string;name:string;seat:number;color:string;bot:boolean;pos:number;lap:number;lane:"main"|"mini";tickets:number;hand:Speed[];held:Midway[];skip:boolean;stalled:boolean;shrink:number;compelled:boolean;active:boolean;policy:Policy;misses:number;stats?:{bashes:number;doubles:number;laps:number}};
 export type Log={id:number;round:number;text:string;kind:"move"|"bash"|"event"|"round"|"condition"};
-export type Game={rules:"3.3"|"3.4";trackLength?:16|18|28;replay?:RoundReplay;phase:"pick"|"finished";map:MapId;pace:"relaxed"|"quick";direction:1|-1;firstSeat:number;nextFirstSeat:number|null;round:number;limit:number;players:Player[];rusty:number;condition:Condition;conditionDeck:Condition[];conditionDiscard:Condition[];milestone:number;highLap:number;speedDeck:Speed[];speedDiscard:Speed[];eventDeck:Midway[];eventDiscard:Midway[];picks:Record<string,Pick>;flags:string[];log:Log[];logSeq:number;deadline:number;final:boolean;lastReveal:{id:string;primary:number;extra?:number;boost?:EventId}[];winners:string[]};
+export type Game={rules:"3.3"|"3.4";trackLength?:16|18|28;replay?:RoundReplay;phase:"pick"|"midway"|"finished";manualMidway?:boolean;presentationSeq?:number;midway?:{starter?:boolean;queue:{actor:string;card:Midway}[];revealed:boolean;delta:Record<string,number>;played:Speed[];boosts:Midway[]};map:MapId;pace:"relaxed"|"quick";direction:1|-1;firstSeat:number;nextFirstSeat:number|null;round:number;limit:number;players:Player[];rusty:number;condition:Condition;conditionDeck:Condition[];conditionDiscard:Condition[];milestone:number;highLap:number;speedDeck:Speed[];speedDiscard:Speed[];eventDeck:Midway[];eventDiscard:Midway[];picks:Record<string,Pick>;flags:string[];log:Log[];logSeq:number;deadline:number;final:boolean;lastReveal:{id:string;primary:number;extra?:number;boost?:EventId}[];winners:string[]};
 export type Rng=()=>number;
 type Chain={owner:string|null;hit:Set<string>;hazards:Set<string>;defenses:Set<string>;grow:Set<string>;steps:number};
 export class GameError extends Error {}
@@ -131,7 +131,7 @@ class Referee {
     for(const p of g.players.filter(p=>p.bot&&p.active)){const primary=p.hand[Math.floor(this.random()*p.hand.length)];if(!primary)throw new GameError("A driver has no cards.");g.picks[p.id]={primary:primary.id};}
   }
   resolve(now:number){
-    const g=this.g;this.delta={};g.replay={round:g.round,initial:visual(g),events:[]};const active=g.players.filter(p=>p.active);
+    const g=this.g;this.delta={};g.replay={sequence:g.presentationSeq=(g.presentationSeq||0)+1,round:g.round,initial:visual(g),events:[]};const active=g.players.filter(p=>p.active);
     const cards=new Map(active.map(p=>[p.id,p.hand.find(c=>c.id===g.picks[p.id].primary)!]));
     const order=[10,9,8,7,6,5,4,3,2,1].flatMap(v=>this.orderTies(active.filter(p=>cards.get(p.id)?.value===v)));
     g.flags=order.map(p=>p.id);g.lastReveal=[];
@@ -145,7 +145,30 @@ class Referee {
     const mod=(v:number)=>Math.max(1,v+(g.condition==="surge"?1:g.condition==="brownout"?-1:0));
     for(const p of order){const m=moves.get(p.id)!;if(p.stalled){this.note(`${p.name}'s committed movement is canceled by the stall.`);continue;}const base=m.boost?.kind==="M10"?11:m.primary.value+(m.boost?.kind==="M05"?m.extra!.value:0);this.speed(p,mod(base));if(m.boost?.kind==="M09"&&!p.stalled)this.speed(p,mod(m.extra!.value));}
     for(let i=0;i<(g.condition==="rampage"?2:1);i++){const roll=this.die();const path:Pose[]=[{pos:g.rusty,lap:0,lane:"main"}];for(let step=0;step<roll;step++)path.push({pos:this.wrap(g.rusty-(step+1)*g.direction),lap:0,lane:"main"});this.emit({type:"travel",actor:"rusty",path});g.rusty=path.at(-1)!.pos;this.note(`Rusty rolls ${roll} and reverses to ${g.rusty}.`,"move");const victims=g.players.filter(p=>p.pos===g.rusty).sort((a,b)=>a.seat-b.seat);this.chain(null,c=>{for(const p of victims)if(p.pos===g.rusty&&!c.hit.has(p.id))this.bash(p,null,c);});}
+    if(g.manualMidway && pending.size){
+      g.midway={queue:this.ordered().flatMap(p=>(pending.get(p.id)||[]).map(card=>({actor:p.id,card}))),revealed:false,delta:{...this.delta},played,boosts};
+      g.phase="midway";g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay):86400000);
+      this.continueMidway(now);return;
+    }
     for(const p of this.ordered()){for(const e of pending.get(p.id)||[]){if(EVENTS[e.kind].type==="INSTANT")this.instant(p,e);else{e.available=g.round+1;p.held.push(e);}}}
+    this.cleanup(played,boosts,now);
+  }
+  continueMidway(now:number){
+    const g=this.g, stage=g.midway;if(!stage)return;
+    while(stage.queue.length && this.player(stage.queue[0].actor).bot){this.placeMidway(now);if(!g.midway)return;}
+    if(!stage.queue.length){g.midway=undefined;g.phase="pick";if(stage.starter){g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay):86400000);return;}this.delta=stage.delta;this.cleanup(stage.played,stage.boosts,now);}
+  }
+  placeMidway(now:number){
+    const g=this.g,stage=g.midway;if(!stage?.queue.length)return;
+    const {actor,card}=stage.queue.shift()!,p=this.player(actor);this.delta={...stage.delta};
+    p.lastMidway=[card,...(p.lastMidway||[])].slice(0,8);
+    if(EVENTS[card.kind].type==="INSTANT")this.instant(p,card);
+    else{card.available=stage.starter?g.round:g.round+1;p.held.push(card);this.emit({type:"card",actor,kind:card.kind});this.note(`${p.name} puts ${EVENTS[card.kind].name} on their mat${stage.starter?" for the first move":" for next round"}.`);}
+    stage.delta={...this.delta};stage.revealed=false;
+    g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay):86400000);
+  }
+  cleanup(played:Speed[],boosts:Midway[],now:number){
+    const g=this.g;
     for(const p of g.players){const delta=this.delta[p.id]||0;if(delta){p.tickets=Math.max(0,p.tickets+delta);this.emit({type:"lap",actor:p.id,delta});this.note(`${p.name}: ${delta>0?"+":""}${delta} lap ticket${Math.abs(delta)===1?"":"s"}.`);}}
     g.speedDiscard.push(...played);g.eventDiscard.push(...boosts);
     if(g.final){g.phase="finished";const rank=[...g.players].sort((a,b)=>b.tickets-a.tickets||position(b,g.direction,this.size)-position(a,g.direction,this.size));g.winners=rank.filter(p=>p.tickets===rank[0].tickets&&position(p,g.direction,this.size)===position(rank[0],g.direction,this.size)).map(p=>p.id);this.note(`${g.winners.map(id=>this.player(id).name).join(" and ")} win${g.winners.length===1?"s":""} the Blue Ribbon!`,"round");g.picks={};return;}
@@ -166,15 +189,20 @@ export function validatePick(g:Game,p:Player,pick:Pick){
   else if(pick.extra)throw new GameError("An extra Speed Card needs Distracted Carnie or Groundhog Day.");
 }
 
-export function makeGame(seats:{id:string;name:string;bot:boolean}[],map:MapId,pace:"relaxed"|"quick",random:Rng,now=Date.now(),options:{trackLength?:16|18|28;startingHand?:number}={}):Game{
+export function makeGame(seats:{id:string;name:string;bot:boolean}[],map:MapId,pace:"relaxed"|"quick",random:Rng,now=Date.now(),options:{trackLength?:16|18|28;startingHand?:number;manualMidway?:boolean;starterMidway?:boolean}={}):Game{
   if(seats.length<2||seats.length>6)throw new GameError("A race needs 2–6 drivers.");
-  const g:Game={rules:"3.4",trackLength:options.trackLength||16,phase:"pick",map,pace,direction:1,firstSeat:0,nextFirstSeat:null,round:0,limit:options.startingHand??6,players:seats.map((s,i)=>({...s,seat:i,color:PAINTS[i],pos:0,lap:0,lane:"main",tickets:3,hand:[],held:[],skip:false,stalled:false,shrink:0,compelled:false,active:true,policy:{...DEFAULT_POLICY},misses:0,stats:{bashes:0,doubles:0,laps:0}})),rusty:Math.floor((options.trackLength||16)/2),condition:undefined as unknown as Condition,conditionDeck:[],conditionDiscard:[],milestone:0,highLap:0,speedDeck:[],speedDiscard:[],eventDeck:[],eventDiscard:[],picks:{},flags:[],log:[],logSeq:0,deadline:now,final:false,lastReveal:[],winners:[]};
+  const g:Game={rules:"3.4",manualMidway:!!options.manualMidway,trackLength:options.trackLength||16,phase:"pick",map,pace,direction:1,firstSeat:0,nextFirstSeat:null,round:0,limit:options.startingHand??6,players:seats.map((s,i)=>({...s,seat:i,color:PAINTS[i],pos:0,lap:0,lane:"main",tickets:3,hand:[],held:[],skip:false,stalled:false,shrink:0,compelled:false,active:true,policy:{...DEFAULT_POLICY},misses:0,stats:{bashes:0,doubles:0,laps:0}})),rusty:Math.floor((options.trackLength||16)/2),condition:undefined as unknown as Condition,conditionDeck:[],conditionDiscard:[],milestone:0,highLap:0,speedDeck:[],speedDiscard:[],eventDeck:[],eventDiscard:[],picks:{},flags:[],log:[],logSeq:0,deadline:now,final:false,lastReveal:[],winners:[]};
   const r=new Referee(g,random);g.speedDeck=r.shuffle(Array.from({length:50},(_,i)=>({id:"s"+i,value:Math.floor(i/5)+1})));g.eventDeck=r.shuffle(Object.entries(EVENTS).flatMap(([kind,e])=>Array.from({length:e.count},(_,i)=>({id:kind+"-"+i,kind:kind as EventId,available:0}))));g.conditionDeck=r.shuffle(Object.keys(CONDITIONS) as Condition[]);
   for(const p of g.players)r.drawSpeed(p,g.limit);
   const lowest=new Map(g.players.map(p=>[p.id,[...p.hand].sort((a,b)=>a.value-b.value)[0]]));
   const order=[10,9,8,7,6,5,4,3,2,1].flatMap(v=>r.orderTies(g.players.filter(p=>lowest.get(p.id)!.value===v)));
   for(const p of order){p.pos=lowest.get(p.id)!.value;if(r.occupied(p,p.pos))r.safe(p,p.pos,1,false);p.hand=p.hand.filter(c=>c.id!==lowest.get(p.id)!.id);g.speedDiscard.push(lowest.get(p.id)!);}
-  for(const p of g.players)r.drawSpeed(p);r.condition();r.begin(now);advanceGame(g,random,now);return g;
+  for(const p of g.players)r.drawSpeed(p);r.condition();r.begin(now);
+  if(options.starterMidway&&g.manualMidway){
+    const queue=r.seatOrder().map(p=>{const i=g.eventDeck.findIndex(c=>EVENTS[c.kind].type!=="INSTANT");if(i<0)throw new GameError("Starter cards unavailable.");const [card]=g.eventDeck.splice(i,1);card.available=1;return {actor:p.id,card};});
+    g.midway={starter:true,queue,revealed:false,delta:{},played:[],boosts:[]};g.phase="midway";r.note("Every driver claims one starter Midway card, usable in round 1.");r.continueMidway(now);
+  }
+  advanceGame(g,random,now);return g;
 }
 
 export function submitPick(g:Game,userId:string,pick:Pick,round:number,random:Rng,now=Date.now()){
@@ -183,8 +211,21 @@ export function submitPick(g:Game,userId:string,pick:Pick,round:number,random:Rn
   if(g.picks[userId]){if(JSON.stringify(g.picks[userId])===JSON.stringify(pick))return;throw new GameError("Your card is already locked in.");}
   validatePick(g,p,pick);g.picks[userId]={...pick};p.misses=0;advanceGame(g,random,now);
 }
+export function midwayAction(g:Game,userId:string,round:number,action:"reveal"|"place",cardId:string|undefined,random:Rng,now=Date.now()){
+  const r=new Referee(g,random),stage=g.midway,next=stage?.queue[0];
+  if(g.round!==round||g.phase!=="midway"||!stage||!next||next.actor!==userId)throw new GameError("Wait for your Midway draw turn.");
+  if(action==="reveal"){stage.revealed=true;return;}
+  if(!stage.revealed||cardId!==next.card.id)throw new GameError("Draw and view this card before placing it.");
+  g.replay={sequence:g.presentationSeq=(g.presentationSeq||0)+1,round:g.round,initial:visual(g),events:[]};
+  r.placeMidway(now);r.continueMidway(now);advanceGame(g,random,now);
+}
+
 export function advanceGame(g:Game,random:Rng,now=Date.now()){
   const r=new Referee(g,random);
+  if(g.phase==="midway"){
+    if(g.deadline<=now){const next=g.midway?.queue[0];if(next){g.replay={sequence:g.presentationSeq=(g.presentationSeq||0)+1,round:g.round,initial:visual(g),events:[]};r.note(`${r.player(next.actor).name}'s Midway timer expired; the card is placed automatically.`);r.placeMidway(now);r.continueMidway(now);}}
+    if((g as Game).phase!=="pick")return;
+  }
   for(let pass=0;pass<20&&g.phase==="pick";pass++){
     if(g.deadline<=now){for(const p of g.players.filter(p=>p.active&&!g.picks[p.id])){const c=[...p.hand].sort((a,b)=>a.value-b.value)[0];if(!c)throw new GameError("A driver has no Speed Cards.");g.picks[p.id]={primary:c.id};p.misses++;r.note(`${p.name}'s timer expired; the lowest card is locked in.`);}}
     if(g.players.some(p=>p.active&&!g.picks[p.id]))return;
@@ -193,9 +234,9 @@ export function advanceGame(g:Game,random:Rng,now=Date.now()){
 }
 
 export function publicGame(g:Game,viewer:string){
-  return {rules:g.rules,trackLength:trackSize(g),replay:g.replay||null,phase:g.phase,map:g.map,pace:g.pace,direction:g.direction,firstSeat:g.firstSeat,round:g.round,limit:g.limit,rusty:g.rusty,condition:g.condition,milestone:g.milestone,deadline:g.deadline,flags:g.flags,lastReveal:g.lastReveal,log:g.log,winners:g.winners,
-    players:g.players.map(p=>({id:p.id,name:p.name,seat:p.seat,color:p.color,bot:p.bot,pos:p.pos,lap:p.lap,lane:p.lane,tickets:p.tickets,skip:p.skip,stalled:p.stalled,shrink:p.shrink,compelled:p.compelled,active:p.active,handCount:p.hand.length,heldCount:p.held.length,locked:!!g.picks[p.id]})),
-    me:(()=>{const p=g.players.find(p=>p.id===viewer);return p?{hand:p.hand,held:p.held,policy:p.policy,pick:g.picks[viewer]||null}:null;})(),
+  return {midway:g.midway?{starter:!!g.midway.starter,actor:g.midway.queue[0]?.actor,pending:g.midway.queue.length,revealed:g.midway.revealed}:null,rules:g.rules,trackLength:trackSize(g),replay:g.replay||null,phase:g.phase,map:g.map,pace:g.pace,direction:g.direction,firstSeat:g.firstSeat,round:g.round,limit:g.limit,rusty:g.rusty,condition:g.condition,milestone:g.milestone,deadline:g.deadline,flags:g.flags,lastReveal:g.lastReveal,log:g.log,winners:g.winners,
+    players:g.players.map(p=>({id:p.id,name:p.name,seat:p.seat,color:p.color,skin:p.skin,mascot:p.mascot,bot:p.bot,pos:p.pos,lap:p.lap,lane:p.lane,tickets:p.tickets,skip:p.skip,stalled:p.stalled,shrink:p.shrink,compelled:p.compelled,active:p.active,handCount:p.hand.length,heldCount:p.held.length,locked:!!g.picks[p.id]})),
+    me:(()=>{const p=g.players.find(p=>p.id===viewer);return p?{drawn:g.midway?.revealed&&g.midway.queue[0]?.actor===viewer?g.midway.queue[0].card:null,lastMidway:p.lastMidway||[],hand:p.hand,held:p.held,policy:p.policy,pick:g.picks[viewer]||null}:null;})(),
     decks:{speed:g.speedDeck.length,midway:g.eventDeck.length,conditions:g.conditionDeck.length}
   };
 }
