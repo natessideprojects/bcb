@@ -26,3 +26,20 @@ h1,h2{letter-spacing:0;line-height:1.2}h3,h4{font-family:var(--font-friendly),sa
 @media(max-width:1000px){.profile-stats{grid-template-columns:repeat(3,1fr)}.driver-hero{padding:25px;gap:15px}.profile-car{width:100px}.driver-hero h1{font-size:28px}.wallet-ticket{padding:15px 20px;min-width:125px}.wallet-ticket strong{font-size:30px}}
 @media(max-width:600px){.condition-strip{padding:10px 12px}.replay-toolbar{padding-inline:3px;font-size:10px;gap:9px}.replay-toolbar .text-button{font-size:11px}.played-card-show{top:15%;scale:.7;transform-origin:top center}.event-card-show{top:12%;scale:.7;transform-origin:top center}.doubles-ribbon{padding:12px 20px;border-width:3px}.doubles-ribbon strong{font-size:31px}.doubles-ribbon small{font-size:9px}.doubles-ribbon span{font-size:11px}.confetti-field i{width:6px;height:12px}.sound-power{padding:8px 10px;font-size:10px}.fair-sound-dock{bottom:10px;right:10px}.sound-panel{width:278px;padding:19px}.sound-panel>p{font-size:12px}.fair-sound-dock>details>summary{padding:8px}.site-header nav .text-button svg{display:none}.site-header nav{gap:11px}.site-header .text-button{font-size:11px}.driver-hero{padding:22px 18px;gap:12px;flex-wrap:wrap}.profile-car{width:77px}.profile-car svg{height:90px}.driver-hero>div:nth-child(2){flex:1;min-width:180px}.driver-hero h1{font-size:24px}.driver-hero p{font-size:12px;flex-wrap:wrap}.driver-hero .eyebrow{font-size:8px;letter-spacing:1px}.wallet-ticket{flex-direction:row;gap:12px;margin:12px 0 0 0;transform:none;width:100%;justify-content:center;padding:10px}.wallet-ticket strong{font-size:28px}.profile-tabs{gap:7px;margin-top:23px;flex-wrap:wrap}.profile-tabs button{font-size:12px;padding:10px 12px;gap:6px}.profile-tabs small{font-size:7px}.profile-stats{grid-template-columns:repeat(2,1fr);gap:13px}.profile-stats article{padding:17px 10px}.profile-stats strong{font-size:27px}.profile-columns{grid-template-columns:1fr;gap:23px}.profile-panel{padding:23px 19px}.profile-panel h2{font-size:20px}.profile-panel>p{font-size:14px}.skin-preview{grid-template-columns:1fr;gap:15px}.skin-preview article{padding:18px}.skin-preview svg{width:110px;height:110px}.skin-preview h3{font-size:19px}.result-list>a{gap:11px}.result-list small{font-size:11px}.result-list b{font-size:17px}.ladder-table th,.ladder-table td{padding:12px 10px}.profile-page{padding-top:25px}.race-footer{padding-bottom:65px}}
 @media(prefers-reduced-motion:reduce){.bash-burst>g,.played-card-show,.event-card-show,.doubles-ribbon,.confetti-field i{animation:none!important}}
+/* ---------- pick-up races (Nov 2026) ---------- */
+.open-toggle{display:flex;gap:10px;align-items:flex-start;margin:14px 0 16px;padding:10px 12px;border:2px dashed #ceb180;border-radius:12px;background:#fff8e9;cursor:pointer;font-size:12px;line-height:1.35;color:#6b553c}
+.open-toggle input{width:20px;height:20px;margin:1px 0 0;accent-color:#b44335;flex:none}
+.open-toggle strong{display:block;font-size:14px;color:#24283f}
+.open-toggle:has(input:checked){border-style:solid;border-color:#b44335;background:#fce1b2}
+.open-races{margin-top:44px}
+.open-races .section-heading .button{flex:none}
+.open-note{margin:-6px 0 14px;max-width:760px}
+.open-race .race-title{flex:1;min-width:0}
+.open-race .button.small{flex:none}
+.status-pill.counting{background:#fde3b1;color:#8c3b1e;border-color:#d9981d}
+.open-countdown{display:flex;gap:10px;align-items:flex-start;margin:14px 0;padding:10px 12px;border-radius:12px;background:#fde3b1;border:2px solid #d9981d;color:#6b3b17;font-size:12px}
+.open-countdown strong{display:block;font-family:var(--display);font-size:18px;color:#8c3b1e}
+.open-countdown span{display:flex;flex-direction:column}
+.open-countdown.waiting{background:#fff8e9;border-color:#ceb180;color:#6b553c}
+.open-countdown.waiting strong{font-size:14px;color:#24283f}
+@media (max-width:640px){.open-races .section-heading{flex-wrap:wrap;gap:10px}.open-race{flex-wrap:wrap}.open-race .race-title{flex-basis:calc(100% - 70px)}}

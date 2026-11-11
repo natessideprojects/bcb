@@ -7,7 +7,7 @@ const schema=z.discriminatedUnion("action",[
  z.object({action:z.literal("remove"),playerId:z.string().min(1).max(100)}),z.object({action:z.literal("start")}),
  z.object({action:z.literal("pick"),round:z.number().int().positive(),pick:z.object({primary:z.string().max(30),extra:z.string().max(30).optional(),boost:z.string().max(30).optional()})}),
  z.object({action:z.literal("drawMidway"),round:z.number().int().positive()}),z.object({action:z.literal("placeMidway"),round:z.number().int().positive(),cardId:z.string().max(40)}),
- z.object({action:z.literal("policy"),policy}),z.object({action:z.literal("close")})
+ z.object({action:z.literal("policy"),policy}),z.object({action:z.literal("close")}),z.object({action:z.literal("leave")})
 ]);
 export const dynamic="force-dynamic";
 type Context={params:Promise<{id:string}>};
