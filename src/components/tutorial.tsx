@@ -8,6 +8,7 @@ import {Brand,Car} from "./brand";
 import {Board} from "./board";
 import {ReplayScene} from "./replay-scene";
 import {GuestEntry} from "./guest-entry";
+import {CardPeek,type PeekCard} from "./card-peek";
 import {EventArt,SpeedDial} from "./card-art";
 import {useRoundReplay,type Beat} from "./use-round-replay";
 import {makeGame,publicGame,type Game,type ReplayEvent,type Visual,type PublicGame} from "@/lib/game/engine";
@@ -31,24 +32,30 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
     {type:"reveal",actor:ME,value:5},{type:"reveal",actor:BIS,value:3},{type:"reveal",actor:TAF,value:1},
     {type:"travel",actor:ME,path:path(1,2,3,4,5,6)},
     {type:"bash",actor:ME,victim:BIS,pos:6,lane:"main",by:ME},
+    {type:"roll",purpose:"knockback",rolls:[{actor:BIS,value:2}]},
     {type:"pay",from:BIS,to:ME,paid:1,bank:0,totals:{[BIS]:2,[ME]:4}},
     {type:"travel",actor:BIS,path:path(6,5,4)},
     {type:"travel",actor:BIS,path:path(4,5,6,7)},
     {type:"travel",actor:TAF,path:path(9,10)},
+    {type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:3}]},
     {type:"travel",actor:"rusty",path:rp(15,14,13,12)},
   ],after:{players:{[ME]:{...p(6),tickets:4,hand:[3,1,2,7,9]},[BIS]:{...p(7),tickets:2,hand:[]},[TAF]:{...p(10),tickets:3,hand:[]}},rusty:12,condition:"lights",milestone:1,reveal:[{id:ME,primary:5},{id:BIS,primary:3},{id:TAF,primary:1}]}},
   {events:[
     {type:"reveal",actor:ME,value:3},{type:"reveal",actor:TAF,value:3},{type:"reveal",actor:BIS,value:1},
+    {type:"roll",purpose:"tie",rolls:[{actor:ME,value:5},{actor:TAF,value:2}],card:3},
     {type:"doubles",actors:[ME,TAF],value:3},
     {type:"travel",actor:ME,path:path(6,7,8,9)},
     {type:"travel",actor:TAF,path:path(10,11,12,13)},
     {type:"hazard",actor:TAF,kind:"tilt",pos:13,lane:"main",roll:1,result:"back"},
+    {type:"roll",purpose:"tilt",rolls:[{actor:TAF,value:1}]},
     {type:"travel",actor:TAF,path:path(13,12,11,10)},
     {type:"travel",actor:BIS,path:path(7,8)},
     {type:"hazard",actor:BIS,kind:"dead",pos:8,lane:"main",result:"paid"},
     {type:"tickets",actor:BIS,delta:-1,reason:"dead",total:1},
+    {type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:2}]},
     {type:"travel",actor:"rusty",path:rp(12,11,10)},
     {type:"bash",actor:null,victim:TAF,pos:10,lane:"main",by:null},
+    {type:"roll",purpose:"knockback",rolls:[{actor:TAF,value:3}]},
     {type:"pay",from:TAF,to:null,paid:1,bank:0,totals:{[TAF]:2}},
     {type:"travel",actor:TAF,path:path(10,9,8,7)},
     {type:"card",actor:ME,kind:"M05"},
@@ -60,12 +67,14 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
     {type:"travel",actor:BIS,path:[...path(8,9,10,11,12,13,14,15,16),p(1,2)]},
     {type:"travel",actor:TAF,path:path(7,8,9)},
     {type:"bash",actor:TAF,victim:ME,pos:9,lane:"main",by:TAF},
+    {type:"roll",purpose:"knockback",rolls:[{actor:ME,value:2}]},
     {type:"pay",from:ME,to:TAF,paid:1,bank:0,totals:{[ME]:3,[TAF]:4}},
     {type:"travel",actor:ME,path:path(9,8,7)},
     {type:"travel",actor:ME,path:path(7,8,9,10)},
     {type:"bash",actor:ME,victim:"rusty",pos:10,lane:"main",by:ME},
     {type:"tickets",actor:ME,delta:2,reason:"bounty",total:5},
-    {type:"travel",actor:"rusty",path:rp(10,2),teleport:true},
+    {type:"travel",actor:"rusty",path:rp(10,11,12,13,14,15,16,1,2)},
+    {type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:3}]},
     {type:"travel",actor:"rusty",path:rp(2,1,16,15)},
     {type:"lap",actor:BIS,delta:1,total:2},
     {type:"condition",condition:"rampage"},
@@ -73,39 +82,46 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
 ];
 
 // What the announcer-in-a-bubble says during each round, keyed by event index.
+// Every bubble names the driver it's about, so "you" always means you.
 const NARRATION:Record<number,Record<number,Bubble>>={
   0:{
     0:{anchor:"center",title:"Reveal!",text:"Everyone’s cards flip at the same time. The highest card takes Flag 1 and moves first. The F1, F2, F3 tags on the cards show the order."},
     3:{anchor:ME,text:"You played 5, so you move 5 sections…"},
     4:{anchor:BIS,title:"BASH!",text:"…and land right on Biscuit’s section. That’s a bash!"},
-    5:{anchor:ME,title:"Ticket swap",text:"Every bash is a ticket swap: Biscuit hands you one of their tickets. Watch the lineup: you go up to 4, Biscuit drops to 2."},
-    6:{anchor:BIS,text:"Biscuit also rolls the die and gets knocked back that many sections (a 2)."},
-    7:{anchor:BIS,text:"Then Biscuit still drives their own card: 3 sections."},
-    8:{anchor:TAF,text:"Taffy only had a 1, so Taffy is Flag 3 and goes last."},
-    9:{anchor:"rusty",title:"Rusty",text:"Rusty rolls and drives backwards 3. He missed everyone… this time."},
+    5:{anchor:"dock",title:"Knockback roll",text:"A bashed driver rolls the die to see how far they get knocked back. Biscuit rolled a 2."},
+    6:{anchor:ME,title:"Ticket swap",text:"Every bash is a ticket swap: Biscuit hands you one of their tickets. Watch the lineup: you go up to 4, Biscuit drops to 2."},
+    7:{anchor:BIS,text:"Biscuit gets knocked back 2 sections…"},
+    8:{anchor:BIS,text:"…and then still drives their own card: 3 sections."},
+    9:{anchor:TAF,text:"Taffy only had a 1, so Taffy is Flag 3 and goes last."},
+    10:{anchor:"rusty",title:"Rusty’s roll",text:"After every driver has moved, Rusty rolls the die and drives backwards that many sections."},
+    11:{anchor:"rusty",text:"Rusty rolled a 3. He missed everyone… this time."},
   },
   1:{
-    0:{anchor:"center",title:"Tied cards",text:"You and Taffy both flipped a 3. A tie rolls the die for the flag: you won the roll, so you’re Flag 1 again and Taffy is Flag 2."},
-    3:{anchor:"center",title:"DOUBLES!",text:"Matching cards are Doubles. Both drivers win a Midway card after the moves."},
-    5:{anchor:TAF,text:"Taffy drives 3 and lands on the Tilt-A-Whirl…"},
-    6:{anchor:TAF,title:"Tilt-A-Whirl",text:"Roll the die: 1–2 spins you back 3, 3–4 stays put, 5–6 flings you forward 3. Taffy rolled a 1."},
-    8:{anchor:BIS,text:"Biscuit’s 1 lands on a Dead Zone…"},
-    9:{anchor:BIS,title:"Dead Zone",text:"Pay a ticket to keep rolling. No ticket to spare? You sit out next round."},
-    11:{anchor:"rusty",text:"Rusty reverses 2… straight into Taffy!"},
-    12:{anchor:TAF,title:"CRUNCH!",text:"Rusty bashes Taffy back 3…"},
-    13:{anchor:TAF,text:"…and takes one of Taffy’s tickets. Rusty never gives them back."},
-    15:{anchor:"dock",title:"Midway card",text:"Your Doubles prize: Distracted Carnie, a BOOST. It waits on your mat until you play it with a Speed Card."},
-    16:{anchor:TAF,text:"Taffy drew an INSTANT card. Instants happen right away: a free ticket!"},
+    2:{anchor:"center",title:"Tied cards",text:"You and Taffy both flipped a 3. A tie is settled with the die: the higher roll gets the earlier flag."},
+    3:{anchor:"dock",title:"Your roll!",text:"Click your die to roll it (or press Next). In a real race, your die rolls itself if you wait too long."},
+    4:{anchor:"center",title:"DOUBLES!",text:"You rolled 5 and Taffy rolled 2, so you’re Flag 1 again. Matching cards are also Doubles: both of you win a Midway card after the moves."},
+    6:{anchor:TAF,text:"Taffy drives 3 and lands on the Tilt-A-Whirl…"},
+    7:{anchor:TAF,title:"Tilt-A-Whirl",text:"Taffy rolls the die: 1–2 spins back 3, 3–4 stays put, 5–6 flings forward 3."},
+    9:{anchor:TAF,text:"Taffy rolled a 1, so Taffy spins back 3 sections."},
+    10:{anchor:BIS,text:"Biscuit’s 1 lands on a Dead Zone…"},
+    11:{anchor:BIS,title:"Dead Zone",text:"The power’s out! Biscuit pays 1 ticket to keep rolling (down to 1). A driver with no ticket to spare sits out the next round instead."},
+    14:{anchor:"rusty",text:"Rusty rolls a 2 and reverses… straight into Taffy!"},
+    15:{anchor:TAF,title:"CRUNCH!",text:"Rusty bashes Taffy. Taffy rolls for knockback: a 3."},
+    17:{anchor:TAF,text:"Rusty also takes one of Taffy’s tickets. Rusty never gives them back."},
+    19:{anchor:"dock",title:"Midway card",text:"Your Doubles prize: Distracted Carnie, a BOOST. It waits on your mat until you play it with a Speed Card. Tap any Midway card on the rink to read it."},
+    20:{anchor:TAF,text:"Taffy drew an INSTANT card. Instants happen right away: Taffy gets a free ticket!"},
   },
   2:{
-    0:{anchor:"center",text:"Biscuit flipped a 9, so Biscuit is Flag 1 and goes first. Your boosted 1 is Flag 3: flags follow the printed card, not the boost."},
+    2:{anchor:"center",text:"Biscuit flipped a 9, so Biscuit is Flag 1 and goes first. Your boosted 1 is Flag 3: flags follow the printed card, not the boost."},
     3:{anchor:BIS,title:"New lap!",text:"Biscuit crosses the checkered Start Line and starts a new lap."},
-    5:{anchor:ME,title:"BASH!",text:"Taffy lands on you! You get knocked back…"},
-    6:{anchor:ME,text:"…and you hand Taffy one of your tickets."},
-    8:{anchor:ME,text:"Now your boosted move: 1 + 2 = 3 sections… onto Rusty!"},
-    9:{anchor:ME,title:"Rusty bounty",text:"Bashing Rusty pays 2 tickets from the bank, and Rusty runs off to the far side of the rink."},
-    13:{anchor:BIS,text:"Every completed lap pays a ticket at the end of the round."},
-    14:{anchor:"center",title:"New Rink Condition",text:"The first driver onto a new lap flips the Rink Sign. Rusty’s Rampage: Rusty moves twice every round until the next flip!"},
+    5:{anchor:ME,title:"BASH!",text:"Taffy lands on you!"},
+    6:{anchor:"dock",title:"Your knockback roll",text:"You were bashed, so you roll for knockback. Click your die (or press Next)."},
+    7:{anchor:ME,text:"You rolled a 2, and you hand Taffy one of your tickets."},
+    9:{anchor:ME,text:"Now your boosted move: 1 + 2 = 3 sections… onto Rusty!"},
+    11:{anchor:ME,title:"Rusty bounty",text:"Bashing Rusty pays you 2 tickets from the bank…"},
+    12:{anchor:"rusty",text:"…and the hit sends Rusty careening half a lap across the rink."},
+    15:{anchor:BIS,text:"Every completed lap pays a ticket at the end of the round. Biscuit gets one."},
+    16:{anchor:"center",title:"New Rink Condition",text:"The first driver onto a new lap flips the Rink Sign. Rusty’s Rampage: Rusty moves twice every round until the next flip!"},
   },
 };
 
@@ -114,6 +130,7 @@ const SCRIPT:Step[]=[
   {say:{anchor:ME,title:"Welcome to the fair!",text:"Let’s watch a quick 3-round race. You’re Rookie, Driver 1: the car with the gold ring. Biscuit is Driver 2 and Taffy is Driver 3. Driver numbers are handed out when a race starts and never change, so watch the badges, the lineup and the announcer."}},
   {say:{anchor:"center",text:"The rink has 16 numbered sections. Your Speed Card is how many sections you move. The route there? Pure bumper-car chaos."}},
   {say:{anchor:{section:3},title:"Hazards",text:"Grease slides you 2 more, the Tilt-A-Whirl spins you with a die roll and a Dead Zone costs a ticket or a turn."}},
+  {say:{anchor:"center",title:"Dice",text:"Every die roll shows on the rink, like a real board game. When it’s your roll, you click your die."}},
   {say:{anchor:"rusty",title:"Meet Rusty",text:"Rusty is the runaway house car. He drives backwards every round, bashes anyone he lands on and takes one of their tickets."}},
   {say:{anchor:"dock",title:"Your hand",text:"Every round, each driver secretly picks one Speed Card from their hand."}},
   {say:{anchor:"dock",text:"You pick 5 and lock in. Nobody sees it until every driver has locked in."},chosen:[5]},
@@ -155,7 +172,7 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
     advance.current=finish;
   }),[]);
   useEffect(()=>{
-    const key=(e:KeyboardEvent)=>{if((e.key==="Enter"||e.key===" "||e.key==="ArrowRight")&&advance.current&&!(e.target instanceof HTMLElement&&e.target.closest("input,textarea,select,a,button"))){e.preventDefault();advance.current();}};
+    const key=(e:KeyboardEvent)=>{if((e.key==="Enter"||e.key===" "||e.key==="ArrowRight")&&(rollRef.current||advance.current)&&!(e.target instanceof HTMLElement&&e.target.closest("input,textarea,select,a,button,[role=dialog]"))){e.preventDefault();if(rollRef.current)rollRef.current();else advance.current?.();}};
     window.addEventListener("keydown",key);return()=>window.removeEventListener("keydown",key);
   },[]);
 
@@ -163,9 +180,18 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
     if(beat.type==="end"){roundDone.current?.();roundDone.current=null;return;}
     if(beat.type!=="event")return;
     const line=NARRATION[roundRef.current]?.[beat.index];if(!line)return;
-    setBubble(line);return hold(line.text);
+    setBubble(line);
+    // On your own roll, clicking the die is the "Next": the bubble just explains it.
+    if(beat.event.type==="roll"&&beat.event.rolls.some(r=>r.actor===ME))return;
+    return hold(line.text);
   },[hold]);
-  const theater=useRoundReplay(game,ME,{onBeat,noCutoff:true});
+  const theater=useRoundReplay(game,ME,{onBeat,noCutoff:true,rollWait:()=>autoRef.current?5000:30*60*1000});
+  const rollPending=!!(theater.dice?.mine&&theater.dice.phase==="waiting");
+  const rollRef=useRef<(()=>void)|null>(null);rollRef.current=rollPending?theater.roll:null;
+  const next=()=>{if(rollRef.current)rollRef.current();else advance.current?.();};
+  const [cardView,setCardView]=useState<PeekCard|null>(null);
+  const openCard=(c:PeekCard)=>{setCardView(c);theater.hold(true);};
+  const closeCard=()=>{setCardView(null);theater.hold(false);};
 
   useEffect(()=>{
     const mine=++alive.current;let state=START;
@@ -205,7 +231,7 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
     <header className="site-header race-header compact"><Brand/><div className="race-heading"><span className="eyebrow light">2-MINUTE TUTORIAL</span><strong>How a round works</strong></div>
       <nav className="tutorial-controls">
         {!done&&<button className="text-button" onClick={toggleAuto} aria-pressed={auto} title={auto?"Tips move on by themselves. Click to wait for Next instead.":"Each tip waits for Next. Click to let tips move on by themselves."}>{auto?<Pause size={16}/>:<Play size={16}/>}<span>{auto?"Auto-play on":"Auto-play"}</span></button>}
-        {!done&&<button className="text-button" onClick={()=>advance.current?.()}><SkipForward size={16}/><span>Next</span></button>}
+        {!done&&<button className="text-button" onClick={next}><SkipForward size={16}/><span>{rollPending?"Roll":"Next"}</span></button>}
         <button className="text-button" onClick={restart}><RotateCcw size={16}/><span>Restart</span></button>
         <Link href="/" className="text-button" aria-label="Exit tutorial"><X size={16}/><span>Exit</span></Link>
       </nav></header>
@@ -213,12 +239,13 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
       <section className="arena-stage">
         <div className={`stage-frame ${theater.active?"playing":""}`}>
           <Board game={game} userId={ME} visual={theater.visual} motion={theater.motion} fx={theater.fx} shake={theater.shake} spotlight={theater.spotlight} hot={null} round={theater.active?theater.round:undefined}/>
-          <ReplayScene show={theater} game={game} hideCaption={!!bubble&&(bubble.anchor==="center"||bubble.anchor==="dock")}/>
+          <ReplayScene show={theater} game={game} hideCaption={!!bubble&&(bubble.anchor==="center"||bubble.anchor==="dock")} onRoll={theater.roll} onPeek={openCard}/>
           <div className="stage-chips"><span className="stage-chip condition" title={CONDITIONS[theater.visual?.condition||game.condition].text}><b>{CONDITIONS[theater.visual?.condition||game.condition].name}</b><i>{CONDITIONS[theater.visual?.condition||game.condition].text}</i></span></div>
           {bubble&&<div key={bubble.text} className={`tutor-bubble ${at?(below?"below":"above"):bubble.anchor==="dock"?"dock":"center"}`} style={bubbleStyle} role="status" aria-live="polite">
             {bubble.title&&<strong>{bubble.title}</strong>}<p>{bubble.text}</p>
-            <button className={auto?"":"waiting"} onClick={()=>advance.current?.()} aria-label="Next tip">Next <ArrowRight size={13}/></button>
+            <button className={auto?"":"waiting"} onClick={next} aria-label={rollPending?"Roll your die":"Next tip"}>{rollPending?"Roll":"Next"} <ArrowRight size={13}/></button>
           </div>}
+          {cardView&&<CardPeek card={cardView} game={game} onClose={closeCard}/>}
           {done&&<div className="finish-card tutor-finish" role="status"><span className="eyebrow">YOU’VE GOT THE BASICS</span><h2>Ready to ride?</h2>
             {signedIn?<Link className="button red" href="/#play">Host or join a race <ArrowRight size={16}/></Link>:<GuestEntry next="/#play" label="Play as a guest"/>}
             <button className="text-button" onClick={restart}><RotateCcw size={15}/> Watch again</button></div>}
@@ -240,7 +267,8 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
           <li><b>Speed Card</b> = sections you move. Highest goes first.</li>
           <li><b>Driver 1–6</b>: your number for the whole race, on your car’s badge.</li>
           <li><b>Flags</b>: highest card is Flag 1 and moves first, but skips the draw.</li>
-          <li><b>Bash</b> = land on a rival: they hand you a ticket and get knocked back a die roll.</li>
+          <li><b>Bash</b> = land on a rival: they hand you a ticket and roll the die for knockback.</li>
+          <li><b>Dice</b>: every roll shows on the rink. Click to roll your own.</li>
           <li><b>Rusty</b> drives backwards and takes a ticket from anyone he hits. Bash him for 2.</li>
           <li><b>Doubles</b> = matching cards: win Midway cards.</li>
           <li><b>Laps</b> pay a ticket. Most tickets wins.</li>

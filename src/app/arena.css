@@ -139,6 +139,59 @@ body:has(.arena){overflow:hidden}
 .midway-reveal strong{display:block;font-family:var(--display);font-size:19px;line-height:1.1;color:#24283f;margin:2px 0}
 .midway-reveal .event-art{width:100%;max-width:170px;height:auto}
 .midway-reveal p{margin:2px 0 0;font-size:12px;line-height:1.3;color:#4b3b2a}
+button.midway-reveal{pointer-events:auto;cursor:pointer;font:inherit;color:inherit}
+button.midway-reveal:hover,button.midway-reveal:focus-visible{outline:3px solid #ffc854;outline-offset:2px}
+.midway-reveal .tap-hint{display:block;margin-top:6px;font:700 10px var(--font-friendly),sans-serif;font-style:normal;letter-spacing:.6px;color:#8c562e}
+.held-badge{position:absolute;right:10px;bottom:10px;margin:0;padding:3px 10px;border-radius:999px;background:#24283f;color:#ffc854;font:700 11px var(--font-friendly),sans-serif}
+/* ---------- dice ---------- */
+.dice-tray{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);z-index:6;min-width:220px;max-width:min(360px,80%);padding:10px 16px 12px;text-align:center;background:#fff8e6;border:4px solid #24283f;border-radius:16px;box-shadow:0 8px 0 #24283f33,0 16px 30px #16234066;animation:card-in .35s cubic-bezier(.2,1.4,.5,1);pointer-events:auto}
+.dice-tray.mine{border-color:#d84233;z-index:9}
+.dice-prompt{margin:0 0 6px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px;font:700 13px/1.3 var(--font-friendly),sans-serif;color:#4b3b2a}
+.dice-prompt strong{font-family:var(--display);font-size:18px;color:#d84233}
+.dice-tray .who{display:inline-flex;align-items:center;gap:4px;padding:1px 8px 1px 2px;border-radius:999px;background:color-mix(in srgb,var(--paint) 25%,#fff);border:1.5px solid var(--paint);color:#24283f;white-space:nowrap}
+.dice-tray .who i{width:17px;height:17px;border-radius:50%;background:var(--paint);border:1.5px solid #fff;color:#fff;font:800 10px/14px var(--font-friendly),sans-serif;font-style:normal;text-align:center}
+.dice-tray .who.rusty{--paint:#6b6460;padding-left:8px}
+.dice-row{display:flex;justify-content:center;gap:16px;margin:4px 0}
+.dice-row figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform .2s}
+.dice-row figure.best{transform:scale(1.08)}
+.dice-row figure.best .die-face rect{stroke:#ffc854;stroke-width:7}
+.die{display:inline-block;width:64px;height:64px}
+.die-face{width:100%;height:100%;filter:drop-shadow(0 4px 0 #24283f55)}
+.die-face rect{fill:#fffdf5;stroke:#24283f;stroke-width:5}
+.die-face circle{fill:#24283f}
+.die-face text{font-family:var(--display);font-size:46px;fill:#c4b49a;text-anchor:middle}
+.die.waiting{animation:die-wobble 1.1s ease-in-out infinite}
+.die.rolling{animation:die-tumble .5s linear infinite}
+.die.done{animation:die-land .35s cubic-bezier(.2,1.6,.4,1)}
+.die-button{display:inline-block;padding:4px;border:0;border-radius:18px;background:#ffc854;cursor:pointer;box-shadow:0 4px 0 #a8692b}
+.die-button:hover,.die-button:focus-visible{outline:3px solid #d84233;outline-offset:3px}
+.dice-hint,.dice-result{position:relative;margin:4px 0 0;font:700 12px/1.3 var(--font-friendly),sans-serif;color:#766855}
+.dice-result{font-size:15px;color:#24283f}
+.dice-result b{font-family:var(--display);font-size:22px;color:#d84233;margin-right:4px}
+.dice-result small{font-size:11px;color:#8c562e}
+.dice-timer{display:block;height:5px;margin-top:6px;border-radius:3px;background:#d84233;transform-origin:left;animation:dice-timer linear forwards}
+@keyframes dice-timer{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+@keyframes die-wobble{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(6deg) translateY(-3px)}}
+@keyframes die-tumble{0%{transform:rotate(0) translateY(0)}25%{transform:rotate(90deg) translateY(-14px) scale(.92)}50%{transform:rotate(180deg) translateY(0)}75%{transform:rotate(270deg) translateY(-8px) scale(.95)}100%{transform:rotate(360deg) translateY(0)}}
+@keyframes die-land{0%{transform:scale(1.3) rotate(-12deg)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){.die.waiting,.die.rolling,.die.done{animation:none}}
+/* ---------- card reader ---------- */
+.card-peek-backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:16px;background:#16234099}
+.card-peek{position:relative;width:min(320px,100%);padding:14px 18px 16px;text-align:center;background:#fff8e6;border:6px solid #b38a5a;border-radius:18px;box-shadow:0 18px 40px #0008;animation:card-in .35s cubic-bezier(.2,1.4,.5,1)}
+.card-peek.boost{border-color:#3b9e7b}.card-peek.defense{border-color:#2d88c9}.card-peek.bash{border-color:#d84233}.card-peek.instant{border-color:#a16ab7}
+.card-peek h3{margin:6px 0 2px;font-family:var(--display);font-size:22px;color:#24283f}
+.card-peek .event-art{width:100%;max-width:200px;height:auto}
+.card-peek>p{margin:4px 0 12px;font-size:14px;line-height:1.4;color:#4b3b2a}
+.card-peek-close{position:absolute;right:6px;top:6px}
+.card-peek-who{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:2px;margin:0 22px 6px;font:700 12px var(--font-friendly),sans-serif;color:#766855}
+.card-peek-who .who{display:inline-flex;align-items:center;gap:4px;padding:1px 8px 1px 2px;border-radius:999px;background:color-mix(in srgb,var(--paint) 25%,#fff);border:1.5px solid var(--paint);color:#24283f}
+.card-peek-who .who i{width:17px;height:17px;border-radius:50%;background:var(--paint);border:1.5px solid #fff;color:#fff;font:800 10px/14px var(--font-friendly),sans-serif;font-style:normal;text-align:center}
+.midway-log{flex:0 0 auto;max-height:190px}
+.midway-log>summary small{font:700 10px var(--font-friendly),sans-serif;color:#8c562e;letter-spacing:.5px}
+.midway-log li button{display:block;width:100%;padding:0;border:0;background:none;text-align:left;font:inherit;color:#24283f;cursor:pointer}
+.midway-log li button:hover strong,.midway-log li button:focus-visible strong{text-decoration:underline}
+.midway-log strong{color:#5d4677}
+.who-mini{display:inline-block;width:15px;height:15px;margin-right:4px;border-radius:50%;border:1.5px solid #fff;color:#fff;font:800 9px/12px var(--font-friendly),sans-serif;text-align:center;vertical-align:-2px}
 .sign-flip{width:min(330px,72%);padding:12px 18px 14px;background:linear-gradient(#e9503e,#9c252a);border:4px solid #f0bf55;border-radius:14px;color:#fff2d5;animation:sign-drop .6s cubic-bezier(.2,1.5,.5,1);outline:3px dotted #ffe9a1;outline-offset:-10px}
 .sign-flip small{display:block;font:700 10px var(--font-friendly),sans-serif;letter-spacing:2.4px;text-transform:uppercase;color:#ffd77a}
 .sign-flip strong{display:block;font-family:var(--display);font-size:22px;line-height:1.15;margin:3px 0}
@@ -278,6 +331,10 @@ body:has(.arena){overflow:hidden}
  .callout{top:38px;font-size:10px;padding:4px 10px 4px 6px}
  .callout strong{font-size:12px}
  .midway-reveal{padding:6px 8px;border-width:3px}
+ .dice-tray{min-width:0;width:86%;padding:6px 8px 8px;border-width:3px}
+ .die{width:46px;height:46px}
+ .dice-prompt{font-size:11px}.dice-prompt strong{font-size:15px}
+ .dice-result{font-size:12px}.dice-result b{font-size:17px}
  .midway-reveal strong{font-size:14px}
  .midway-reveal p,.midway-reveal .event-art{display:none}
  .sign-flip strong{font-size:16px}.sign-flip p{font-size:11px}

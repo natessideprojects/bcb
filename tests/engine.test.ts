@@ -62,7 +62,7 @@ test("skipped drivers can replace a missing card; stalled drivers cannot draw",(
 test("the final round suppresses every normal replacement draw",()=>{const g=makeGame(seats(),'day','relaxed',seeded(17),1000);const [a,b]=g.players;g.condition='free';g.speedDiscard.push(...a.hand.splice(1));a.hand[0].value=10;b.hand[0].value=1;const before=b.hand.length,round=g.round;submitPick(g,a.id,{primary:a.hand[0].id},round,seeded(4),1001);submitPick(g,b.id,{primary:b.hand[0].id},round,seeded(5),1001);assert.equal(g.phase,'finished');assert.equal(a.hand.length,0);assert.equal(b.hand.length,before-1);assert.ok(!g.replay!.events.some(e=>e.type==='draw'));conserve(g);});
 test("replay paths contain actual one-space travel and no future cards",()=>{const g=makeGame(seats(4),'day','relaxed',seeded(11),1000);const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,seeded(p.seat+1),1001);assert.ok(g.replay);assert.equal(g.replay.round,round);assert.ok(g.replay.events.some(e=>e.type==='reveal'));assert.ok(g.replay.events.some(e=>e.type==='travel'));for(const e of g.replay.events){if(e.type==='travel'&&!e.teleport)for(let i=1;i<e.path.length;i++){const d=Math.abs(e.path[i].pos-e.path[i-1].pos);assert.ok(d<=1||d===15,`Bad replay step ${d}`);}}const replay=JSON.stringify(publicGame(g,'user0').replay);assert.ok(!replay.includes('speedDeck'));assert.ok(!replay.includes('hand'));assert.ok(!replay.includes(g.speedDeck[0].id+'"'));});
 test("16-section reverse travel wraps at the arena Start Line",()=>{const g=makeGame(seats(),'day','relaxed',seeded(8),1000);g.condition='free';g.players[0].pos=1;g.players[1].pos=11;g.rusty=9;scenario(g,'M20','user0',seeded(2));scenario(g,'M03','user0',seeded(2));assert.equal(g.players[0].pos,14);assert.equal(g.players[0].lap,1);});
-test("Quick Race reserves replay time in addition to its pick allowance",()=>{const g=makeGame(seats(4),'day','quick',seeded(76),1000);const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,seeded(p.seat+20),1001);assert.equal(g.round,2);assert.ok(g.deadline>1001+60000);assert.ok(g.deadline<=1001+180000);});
+test("Quick Race reserves replay time in addition to its pick allowance",()=>{const g=makeGame(seats(4),'day','quick',seeded(76),1000);const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,seeded(p.seat+20),1001);assert.equal(g.round,2);assert.ok(g.deadline>1001+60000);assert.ok(g.deadline<=1001+240000);});
 test("saved 3.3 games retain the original 28-space interpretation",()=>{const g=fresh();g.rules='3.3';delete g.trackLength;assert.equal(publicGame(g,'user0').trackLength,28);assert.equal(g.limit,3);const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,seeded(p.seat+12),1001);conserve(g);assert.equal(publicGame(g,'user0').rules,'3.3');});
 
 test("Lead Foot Bash gives the leader a full lap and passes every rival in either direction",()=>{
@@ -109,7 +109,8 @@ test("Sauron's curse length follows the number of drivers",()=>{
 });
 
 // ---------- ticket ledger (Nov 2026 audit) ----------
-import {midwayAction,testMove,type ReplayEvent} from "../src/lib/game/engine";
+import {midwayAction,replayBudget,testMove,type ReplayEvent} from "../src/lib/game/engine";
+import {ROLL_WAIT} from "../src/lib/game/presentation";
 /** Replays a round's events over its starting tickets and checks they explain every change. */
 function audit(g:Game,label:string){
   const replay=g.replay!;assert.ok(replay.initial.tickets,label+": replay records starting tickets");
@@ -202,4 +203,56 @@ test("no hostages: when the pick timer runs out, an absent driver's lowest card 
   assert.equal(reveals.find(e=>e.actor===b.id)?.auto,true);assert.equal(reveals.find(e=>e.actor===a.id)?.auto,undefined);
   assert.equal(b.misses,1);assert.equal(a.misses,0);assert.ok(g.log.some(l=>l.text.includes("timer expired; the lowest card is locked in")));
   conserve(g);
+});
+
+// ---------- dice (Nov 2026): every roll is shown ----------
+type Roll=Extract<ReplayEvent,{type:"roll"}>;
+const rollsOf=(events:ReplayEvent[],purpose?:Roll["purpose"])=>events.filter((e):e is Roll=>e.type==="roll"&&(!purpose||e.purpose===purpose));
+test("the bashed driver rolls for knockback, and the shown roll is the distance used",()=>{
+  const g=fresh(2);g.condition="bumper";g.rusty=20;const [a,b]=g.players;a.pos=1;b.pos=9;
+  const events=testMove(g,a.id,8,()=>.5); // die = 4
+  const [roll]=rollsOf(events,"knockback");
+  assert.deepEqual(roll,{type:"roll",purpose:"knockback",rolls:[{actor:b.id,value:4}],bonus:2});
+  assert.equal(b.pos,9-6,"knocked back 4 + Bumper 2");
+  const order=events.map(e=>e.type);assert.ok(order.indexOf("roll")>order.indexOf("bash")&&order.indexOf("roll")<order.indexOf("pay"));
+});
+test("Super Bash shows its multiplier on the knockback roll",()=>{
+  const g=fresh(2);g.condition="free";g.rusty=20;const [a,b]=g.players;a.pos=1;b.pos=5;a.held.push({id:"super",kind:"M16",available:0});
+  const events=testMove(g,a.id,4,()=>0);
+  const [roll]=rollsOf(events,"knockback");assert.equal(roll.multiplier,3);assert.equal(roll.rolls[0].value,1);
+  assert.ok(g.cards?.some(c=>c.kind==="M16"&&c.how==="used"&&c.actor===a.id),"used Bash cards are listed for everyone");
+});
+test("Tilt-A-Whirl, Rusty, stall escapes and tied flags all show their dice",()=>{
+  let tilt=0,rusty=0,escape=0,tie=0;
+  for(let seed=1;seed<=60;seed++){
+    const n=2+seed%5,rng=seeded(seed*31);const g=makeGame(seats(n),seed%2?"day":"night","relaxed",rng,1000);
+    for(let guard=0;guard<40&&g.phase==="pick";guard++){
+      const round=g.round;for(const p of g.players.filter(p=>p.active&&!g.picks[p.id]))submitPick(g,p.id,{primary:p.hand[Math.floor(rng()*p.hand.length)].id},round,rng,1001);
+      if(g.replay?.round!==round)continue;const ev=g.replay.events;
+      ev.forEach((e,i)=>{
+        if(e.type==="hazard"&&e.kind==="tilt"){const r=ev[i+1];assert.ok(r?.type==="roll"&&r.purpose==="tilt"&&r.rolls[0].value===e.roll&&r.rolls[0].actor===e.actor);tilt++;}
+        if(e.type==="roll"&&e.purpose==="rusty"){const t=ev[i+1];assert.ok(t?.type==="travel"&&t.actor==="rusty"&&t.path.length-1===e.rolls[0].value,"Rusty drives exactly his roll");rusty++;}
+        if(e.type==="roll"&&e.purpose==="escape"){assert.ok(e.rolls[0].value>=1&&e.rolls[0].value<=6);escape++;}
+        if(e.type==="roll"&&e.purpose==="tie"){const ids=e.rolls.map(r=>r.actor);const flags=g.lastReveal.map(r=>r.id);assert.ok(ids.every(id=>g.lastReveal.find(r=>r.id===id)?.primary===e.card));
+          const best=Math.max(...e.rolls.map(r=>r.value)),winners=e.rolls.filter(r=>r.value===best).map(r=>r.actor);if(winners.length===1){const pos=(id:string)=>flags.indexOf(id);assert.ok(ids.every(id=>id===winners[0]||pos(winners[0])<pos(id)),"the higher roll takes the earlier flag");}tie++;}
+        if(e.type==="travel"&&e.actor==="rusty")assert.ok(!e.teleport,"Rusty never teleports");
+      });
+      assert.ok(ev.findIndex(e=>e.type==="roll"&&e.purpose==="tie")<0||ev.findIndex(e=>e.type==="roll"&&e.purpose==="tie")>ev.findLastIndex(e=>e.type==="reveal"),"tie rolls come after the reveal");
+    }
+  }
+  assert.ok(tilt>5&&rusty>50&&escape>2&&tie>5,`coverage: tilt ${tilt}, rusty ${rusty}, escape ${escape}, tie ${tie}`);
+});
+test("a bashed Rusty drives half a lap ahead instead of teleporting",()=>{
+  const g=fresh(2);g.condition="free";g.trackLength=16;g.rusty=9;const [c,d]=g.players;c.pos=5;d.pos=2;
+  const events=testMove(g,c.id,4,()=>0);const t=events.find(e=>e.type==="travel"&&e.actor==="rusty");
+  assert.ok(t&&t.type==="travel"&&!t.teleport);assert.equal(t.path.length-1,8);assert.equal(t.path.at(-1)!.pos,1);assert.equal(g.rusty,1);
+  for(let i=1;i<t.path.length;i++){const step=Math.abs(t.path[i].pos-t.path[i-1].pos);assert.ok(step===1||step===15);}
+});
+test("drawn INSTANT cards are listed for every driver to read",()=>{
+  const g=fresh(2);g.condition="free";scenario(g,"M04",g.players[1].id,seeded(4));
+  const view=publicGame(g,g.players[0].id);assert.deepEqual(view.cards.map(c=>[c.actor,c.kind,c.how]),[[g.players[1].id,"M04","drew"]]);
+});
+test("the playback reserve waits for human dice only",()=>{
+  const replay={round:1,initial:{players:{},rusty:1,direction:1 as const,condition:"free" as const,milestone:0},events:[{type:"roll" as const,purpose:"knockback" as const,rolls:[{actor:"bot",value:3}]},{type:"roll" as const,purpose:"rusty" as const,rolls:[{actor:"rusty",value:2}]},{type:"roll" as const,purpose:"tilt" as const,rolls:[{actor:"nate",value:5}]}]};
+  assert.equal(replayBudget(replay,["nate"])-replayBudget(replay,[]),ROLL_WAIT);
 });

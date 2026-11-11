@@ -5,11 +5,11 @@
 // from the announcer.
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from "react";
 import {replayBudget} from "@/lib/game/engine";
-import type {PublicGame, ReplayEvent, RoundReplay, Visual, Pose} from "@/lib/game/engine";
+import type {PublicGame, ReplayEvent, RollPurpose, RoundReplay, Visual, Pose} from "@/lib/game/engine";
 import {CONDITIONS, EVENTS, type Condition, type EventId} from "@/lib/game/catalog";
 import {fairSound, type Part, type SfxName, type VoClip} from "@/lib/fair-audio";
 import {lines, rotate} from "@/lib/announcer";
-import {GO_BEAT, eventDuration} from "@/lib/game/presentation";
+import {DICE_HOLD, DICE_TUMBLE, GO_BEAT, ROLL_WAIT, eventDuration} from "@/lib/game/presentation";
 import {carRoute, miniRoute, rustyRoute, rustySlot, slotPoint, startPoint, travelPoint, type Pt} from "@/lib/game/rink";
 
 export type Motion = {x: number; y: number; face: 1 | -1; tilt: number; opacity?: number; scale?: number};
@@ -32,11 +32,21 @@ export type Theater = {
   banner: Banner | null; reveals: Reveal[]; revealed: number; spotlight: string | null; shake: string | null;
   /** Running ticket counts while the round plays, so exchanges show as they happen. */
   tickets: Record<string, number> | null; caption: Caption | null;
+  /** The die (or dice, for a tied flag) on the table right now. */
+  dice: DiceView | null; held: boolean;
+};
+/**
+ * A die roll on screen. The server rolled it when the round resolved; the viewer's
+ * own die waits for their click (or `waitMs`, then rolls itself) before it tumbles.
+ */
+export type DiceView = {
+  id: number; purpose: RollPurpose; rolls: {actor: string; value: number}[]; phase: "waiting" | "rolling" | "done";
+  mine: boolean; waitMs: number; auto?: boolean; multiplier?: number; bonus?: number; card?: number;
 };
 /** A narration hook point: the tutorial uses these to time its speech bubbles. */
 export type Beat = {type: "event"; event: ReplayEvent; index: number} | {type: "go"} | {type: "end"};
-export type ReplayHooks = {onBeat?: (beat: Beat) => Promise<void> | void; noCutoff?: boolean};
-const idle: Theater = {active: false, round: 0, visual: null, motion: {}, fx: [], banner: null, reveals: [], revealed: 0, spotlight: null, shake: null, tickets: null, caption: null};
+export type ReplayHooks = {onBeat?: (beat: Beat) => Promise<void> | void; noCutoff?: boolean; rollWait?: () => number};
+const idle: Theater = {active: false, round: 0, visual: null, motion: {}, fx: [], banner: null, reveals: [], revealed: 0, spotlight: null, shake: null, tickets: null, caption: null, dice: null, held: false};
 const tix = (n: number) => `${n} ticket${n === 1 ? "" : "s"}`;
 const secs = (n: number) => `${n} section${n === 1 ? "" : "s"}`;
 const copy = (v: Visual): Visual => ({...v, players: Object.fromEntries(Object.entries(v.players).map(([id, p]) => [id, {...p}]))});
@@ -51,12 +61,34 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
   hooksRef.current = hooks;
 
   const cutoff = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const skip = useCallback(() => { if (cutoff.current) clearTimeout(cutoff.current); token.current++; fairSound.cancel(); setShow(idle); }, []);
+  // When the Quick Race cutoff fires; paused while a card is held open, so reading doesn't eat the show.
+  const cutoffAt = useRef(0), cutoffToken = useRef(0);
+  const held = useRef(false), heldSince = useRef(0), rollNow = useRef<(() => void) | null>(null);
+  const skip = useCallback(() => { if (cutoff.current) clearTimeout(cutoff.current); token.current++; held.current = false; rollNow.current = null; fairSound.cancel(); setShow(idle); }, []);
+  const armCutoff = useCallback((ms: number, mine: number) => {
+    if (cutoff.current) clearTimeout(cutoff.current);
+    cutoffAt.current = Date.now() + ms; cutoffToken.current = mine;
+    cutoff.current = setTimeout(() => { if (token.current === mine) skip(); }, ms);
+  }, [skip]);
+  /** Pause the show (a Midway card held open to read) or resume it. */
+  const hold = useCallback((on: boolean) => {
+    if (held.current === on) return;
+    held.current = on;
+    if (on) { heldSince.current = Date.now(); if (cutoff.current) clearTimeout(cutoff.current); }
+    else if (cutoffAt.current && cutoffToken.current === token.current && !hooksRef.current?.noCutoff) {
+      cutoffAt.current += Date.now() - heldSince.current;
+      armCutoff(Math.max(1000, cutoffAt.current - Date.now()), cutoffToken.current);
+    }
+    setShow(s => (s.active ? {...s, held: on} : s));
+  }, [armCutoff]);
+  /** Roll your own die now (instead of waiting for it to roll itself). */
+  const roll = useCallback(() => { rollNow.current?.(); }, []);
 
   const run = useCallback(async (replay: RoundReplay, before: Record<string, number>) => {
     if (cutoff.current) clearTimeout(cutoff.current);
     const mine = ++token.current;
-    if (!hooksRef.current?.noCutoff) cutoff.current = setTimeout(() => { if (token.current === mine) skip(); }, replayBudget(replay));
+    held.current = false;
+    if (!hooksRef.current?.noCutoff) armCutoff(replayBudget(replay, latest.current?.players.filter(p => !p.bot).map(p => p.id)), mine);
     fairSound.cancel();
     const alive = () => token.current === mine;
     // Ending the show retires this run's token, so effect timers that fire later
@@ -67,7 +99,17 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
     const length = g.trackLength || 28;
     const seat = (id: string) => g.players.find(p => p.id === id)?.seat ?? 0;
     const pace = () => (fairSound.get().animation === "fast" ? 0.5 : 1);
-    const wait = async (ms: number) => { await new Promise(r => setTimeout(r, ms * pace())); return alive(); };
+    // Waits run in small steps so a held-open card pauses the show.
+    const wait = async (ms: number) => {
+      let left = ms * pace();
+      while (left > 0) {
+        const step = Math.min(left, 100);
+        await new Promise(r => setTimeout(r, step));
+        if (!alive()) return false;
+        if (!held.current) left -= step;
+      }
+      return alive();
+    };
     const sfx = (name: SfxName, opts?: {volume?: number; rate?: number; delay?: number}) => fairSound.effect(name, opts);
     const say = (line: Part | Part[], priority = 1) => fairSound.say(line, priority);
     // "Driver two!" ahead of the line, so everyone hears who it's happening to. Drivers
@@ -76,7 +118,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
 
     const view = copy(replay.initial);
     const state: Theater = {...idle, active: true, round: replay.round, visual: view, tickets: replay.initial.tickets ? {...replay.initial.tickets} : null};
-    const paint = () => { if (alive()) setShow({...state, visual: copy(view), motion: {...state.motion}, fx: [...state.fx], tickets: state.tickets && {...state.tickets}}); };
+    const paint = () => { if (alive()) setShow({...state, visual: copy(view), motion: {...state.motion}, fx: [...state.fx], tickets: state.tickets && {...state.tickets}, held: held.current}); };
     let captionSeq = 0;
     const call = (parts: CaptionPart[], tone?: Caption["tone"]) => { state.caption = {id: ++captionSeq, parts, tone}; };
     const setTickets = (id: string, total: number | undefined, delta: number) => {
@@ -102,7 +144,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
     const stopCrowd = fairSound.loop("crowd", 0.17);
     const mineHit = (id: string | null) => id === userId;
 
-    let started = false, rustyMoves = 0, lastBashVictim: string | null = null, lastKnock = false;
+    let started = false, rustyMoves = 0, lastBashVictim: string | null = null, lastKnock = false, rustyKnocked = false, diceSeq = 0, afterRustyRoll = false;
     let karma: string | null = null, slid: Extract<ReplayEvent, {type: "hazard"}> | null = null;
     const drove = new Set<string>();
     const go = async () => {
@@ -140,7 +182,9 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
         case "travel": {
           lastKnock = lastBashVictim === e.actor;
           const steps = e.path.length - 1, last = e.path[steps];
-          if (e.actor === "rusty") call(e.teleport ? [`Rusty runs off to section ${last.pos}`] : [`Rusty reverses ${secs(steps)}`]);
+          const knockedAway = e.actor === "rusty" && rustyKnocked;
+          // (After Rusty's roll the caption already says how far he reverses.)
+          if (e.actor === "rusty") { if (knockedAway) call([`The bash sends Rusty careening ${secs(steps)} across the rink to section ${last.pos}`]); else if (e.teleport) call([`Rusty runs off to section ${last.pos}`]); else if (!afterRustyRoll) call([`Rusty reverses ${secs(steps)}`]); }
           else if (e.teleport) {
             const first = e.path[0];
             call([{who: e.actor}, last.lane !== first.lane ? (last.lane === "mini" ? " shrinks onto the mini-track" : " grows back to full size") : last.pos === 0 ? " goes back to the Start Grid" : ` takes the open section ${last.pos}`]);
@@ -151,10 +195,10 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
             else if (!drove.has(e.actor)) { verb = "drives"; drove.add(e.actor); say(named(e.actor), 1); }
             call([{who: e.actor}, ` ${verb} ${secs(steps)}`]);
           }
-          karma = null; slid = null;
+          karma = null; slid = null; rustyKnocked = false;
           paint();
-          if (!(await drive(e))) return false;
-          if (lastKnock && e.path.length - 1 >= 5) say("bash_far", 1);
+          if (!(await drive(e, knockedAway))) return false;
+          if (lastKnock && !knockedAway && e.path.length - 1 >= 5) say("bash_far", 1);
           lastBashVictim = null;
           return true;
         }
@@ -173,6 +217,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           else { sfx("bash"); sfx("bonk", {delay: 60, volume: 0.6}); say(chain ? "bash_chain" : named(e.actor, lines.bash()), 2); }
           if (mineHit(e.victim)) sfx("aww", {delay: 250, volume: 0.8}); else sfx("roar", {delay: 120, volume: 0.55});
           lastBashVictim = e.victim;
+          if (e.victim === "rusty") rustyKnocked = true;
           if (!(await wait(eventDuration(e)))) return false;
           state.shake = null; paint();
           return true;
@@ -183,7 +228,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           state.banner = {kind: "hazard", actor: e.actor, hazard: e.kind, roll: e.roll, result: e.result};
           slid = e;
           if (e.kind === "grease") { call([{who: e.actor}, " hits the Grease and slides"]); sfx("grease"); say(named(e.actor, lines.grease()), 2); sfx("roar", {delay: 300, volume: 0.35}); }
-          if (e.kind === "tilt") { call([{who: e.actor}, ` rides the Tilt-A-Whirl: rolled ${e.roll}, ${e.result === "forward" ? "flung forward" : e.result === "back" ? "spun backward" : "holds steady"}`]); sfx("tilt"); say(named(e.actor, e.result === "forward" ? "hazard_tilt_forward" : e.result === "back" ? "hazard_tilt_back" : "hazard_tilt_stay"), 2); }
+          if (e.kind === "tilt") { call([{who: e.actor}, " lands on the Tilt-A-Whirl: roll 1–2 to spin back, 3–4 to hold, 5–6 to fly forward"]); sfx("tilt"); say(named(e.actor, "hazard_tilt"), 2); }
           if (e.kind === "dead") { call([{who: e.actor}, e.result === "paid" ? " hits a Dead Zone: the power’s out!" : " hits a Dead Zone and sits out next round"], "bad"); sfx("dead"); say(named(e.actor, e.result === "paid" ? "hazard_dead_paid" : "hazard_dead_sitout"), 2); if (e.result === "skip") sfx("aww", {delay: 400, volume: 0.6}); }
           paint();
           if (!(await wait(eventDuration(e)))) return false;
@@ -270,6 +315,51 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           state.banner = null; paint();
           return true;
         }
+        case "roll": {
+          // Each die: the viewer's own waits for a click (or rolls itself), everyone else's just rolls.
+          const mine = e.rolls.some(r => r.actor === userId);
+          const waitMs = mine ? (hooksRef.current?.rollWait?.() ?? ROLL_WAIT) : 0;
+          const roller = e.rolls.length === 1 ? e.rolls[0].actor : null;
+          state.dice = {id: ++diceSeq, purpose: e.purpose, rolls: e.rolls, phase: mine ? "waiting" : "rolling", mine, waitMs, multiplier: e.multiplier, bonus: e.bonus, card: e.card};
+          state.caption = null;
+          if (roller && roller !== "rusty") state.spotlight = roller;
+          paint();
+          if (mine) {
+            const auto = await new Promise<boolean>(resolve => {
+              let done = false;
+              const end = (auto: boolean) => { if (done) return; done = true; clearTimeout(timer); clearInterval(watch); if (rollNow.current === click) rollNow.current = null; resolve(auto); };
+              const click = () => end(false);
+              const timer = setTimeout(() => end(true), waitMs);
+              const watch = setInterval(() => { if (!alive()) end(true); }, 200);
+              rollNow.current = click;
+            });
+            if (!alive()) return false;
+            state.dice = {...state.dice!, phase: "rolling", auto}; paint();
+          }
+          sfx("dice", {volume: 0.85});
+          if (!(await wait(DICE_TUMBLE))) return false;
+          state.dice = {...state.dice!, phase: "done"};
+          const v = e.rolls[0].value, who: CaptionPart = roller === "rusty" || !roller ? "Rusty" : {who: roller};
+          if (e.purpose === "knockback") {
+            const total = v * (e.multiplier ?? 1) + (e.bonus ?? 0);
+            call([who, ` rolls ${v}: knocked back ${total === v ? secs(v) : `${v}${e.multiplier ? ` × ${e.multiplier}` : ""}${e.bonus ? ` + ${e.bonus}` : ""} = ${secs(total)}`}`], "bash");
+          } else if (e.purpose === "tilt") {
+            call([who, ` rolls ${v}: ${v < 3 ? "spun backward!" : v > 4 ? "flung forward!" : "holding steady"}`]);
+            say(v < 3 ? "hazard_tilt_back" : v > 4 ? "hazard_tilt_forward" : "hazard_tilt_stay", 2);
+          } else if (e.purpose === "escape") {
+            call([who, ` rolls ${v} to escape the stall: ${v >= 4 ? "back in action!" : "still stalled"}`], v >= 4 ? "good" : "bad");
+            if (v >= 4) say(named(roller, "stall_free"), 2);
+          } else if (e.purpose === "rusty") {
+            call([`Rusty rolls ${v}: he reverses ${secs(v)}`]);
+          } else {
+            const best = Math.max(...e.rolls.map(r => r.value)), top = e.rolls.filter(r => r.value === best);
+            call(top.length > 1 ? [`Tied again at ${best}! Roll again`] : [{who: top[0].actor}, ` rolls ${best} and takes the earlier flag`]);
+          }
+          paint();
+          if (!(await wait(DICE_HOLD + (e.rolls.length > 1 ? 400 : 0)))) return false;
+          state.dice = null; state.spotlight = null; paint();
+          return true;
+        }
         case "draw": {
           if (e.actor === userId) sfx("draw", {volume: 0.6});
           break;
@@ -282,6 +372,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
       if (fairSound.get().animation === "off") { skip(); return; }
       if (e.type !== "reveal" && e.type !== "doubles" && e.type !== "draw" && e.type !== "condition" && !(await go())) return;
       const hold = hooksRef.current?.onBeat?.({type: "event", event: e, index});
+      afterRustyRoll = index > 0 && replay.events[index - 1].type === "roll" && (replay.events[index - 1] as Extract<ReplayEvent, {type: "roll"}>).purpose === "rusty";
       if (!(await playEvent(e))) return;
       if (hold) { await hold; if (!alive()) return; }
     }
@@ -320,7 +411,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
     finish();
 
     // One car (or Rusty) drives its hidden route from bay to bay.
-    async function drive(e: Extract<ReplayEvent, {type: "travel"}>) {
+    async function drive(e: Extract<ReplayEvent, {type: "travel"}>, knockedAway = false) {
       const actor = e.actor, isRusty = actor === "rusty", s = isRusty ? 0 : seat(actor);
       const path = e.path, first = path[0], last = path[path.length - 1];
       const bay = (p: Pose) => (isRusty ? rustySlot(p.pos, length) : slotPoint(s, p.pos, p.lane, length));
@@ -359,7 +450,8 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
       const steps = path.length - 1;
 
       const stop = isRusty ? (sfx("rusty-move"), () => {}) : fairSound.loop("drive", 0.32);
-      if (isRusty) say(rustyMoves++ ? "rusty_again" : replay.round <= 1 ? "rusty_intro" : lines.rustyMove(steps), 2);
+      if (knockedAway) say("rusty_jump", 2); // "And Rusty's off to the far side!"
+      else if (isRusty) say(rustyMoves++ ? "rusty_again" : replay.round <= 1 ? "rusty_intro" : lines.rustyMove(steps), 2);
       if (!isRusty && steps >= 4) sfx("squeak", {delay: duration * 0.45, volume: 0.6});
 
       let face: 1 | -1 = -1, prev = start, crossed = 0;
@@ -392,7 +484,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
       delete state.motion[actor]; paint();
       return true;
     }
-  }, [skip, userId]);
+  }, [skip, userId, armCutoff]);
 
   useLayoutEffect(() => {
     if (!game) return;
@@ -411,5 +503,5 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
   }, [skip]);
   useEffect(() => fairSound.subscribe(() => { if (fairSound.get().animation === "off") skip(); }), [skip]);
 
-  return {...show, skip, replay: () => { if (latest.current?.replay) void run(latest.current.replay, {}); }};
+  return {...show, skip, hold, roll, replay: () => { if (latest.current?.replay) void run(latest.current.replay, {}); }};
 }

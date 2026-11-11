@@ -9,6 +9,7 @@ import {MidwayMat} from "./midway-mat";
 import {Board} from "./board";
 import {useRoundReplay} from "./use-round-replay";
 import {PlayCall,ReplayScene} from "./replay-scene";
+import {CardPeek,type PeekCard} from "./card-peek";
 import {EventArt,SpeedDial} from "./card-art";
 import {api} from "@/lib/client-api";
 import {fairSound} from "@/lib/fair-audio";
@@ -24,10 +25,14 @@ function Timer({deadline,quick}:{deadline:number;quick:boolean}){
 }
 
 export function Race({id,user}:{id:string;user:{id:string;name:string}}){
- const router=useRouter();const[room,setRoom]=useState<PublicRoom|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[rules,setRules]=useState(false),[copied,setCopied]=useState(false),[primary,setPrimary]=useState(""),[extra,setExtra]=useState(""),[boost,setBoost]=useState(""),[peek,setPeek]=useState(""),[policy,setPolicy]=useState<Policy>({dead:"pay",karma:"use",daddy:"intercept",bash:"strongest"});
+ const router=useRouter();const[room,setRoom]=useState<PublicRoom|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[rules,setRules]=useState(false),[copied,setCopied]=useState(false),[primary,setPrimary]=useState(""),[extra,setExtra]=useState(""),[boost,setBoost]=useState(""),[peek,setPeek]=useState(""),[cardView,setCardView]=useState<PeekCard|null>(null),[policy,setPolicy]=useState<Policy>({dead:"pay",karma:"use",daddy:"intercept",bash:"strongest"});
  const load=useCallback(async()=>{try{const r=await api<{room:PublicRoom}>("/api/rooms/"+id);setRoom(old=>!old||r.room.id!==old.id||r.room.revision>=old.revision?r.room:old);setError("");}catch(e){setError((e as Error).message);}},[id]);
  useEffect(()=>{let active=true;const pull=()=>{if(active&&document.visibilityState==="visible")void load();};pull();if(room?.status==="finished"||room?.status==="closed")return()=>{active=false;};const timer=setInterval(pull,room?.status==="lobby"?6000:4000);document.addEventListener("visibilitychange",pull);return()=>{active=false;clearInterval(timer);document.removeEventListener("visibilitychange",pull);};},[load,room?.status]);
- const game=room?.game;const theater=useRoundReplay(game||undefined,user.id);const me=game?.players.find(p=>p.id===user.id),own=game?.me,host=room?.hostId===user.id;
+ const game=room?.game;const theater=useRoundReplay(game||undefined,user.id);
+ // Reading a Midway card pauses the round playback until the card is closed.
+ const openCard=useCallback((c:PeekCard)=>{setCardView(c);theater.hold(true);},[theater.hold]); // eslint-disable-line react-hooks/exhaustive-deps
+ const closeCard=useCallback(()=>{setCardView(null);theater.hold(false);},[theater.hold]); // eslint-disable-line react-hooks/exhaustive-deps
+ const me=game?.players.find(p=>p.id===user.id),own=game?.me,host=room?.hostId===user.id;
  useEffect(()=>{setPrimary("");setExtra("");setBoost("");setPeek("");},[game?.round]);
  useEffect(()=>{if(own?.policy)setPolicy(own.policy);},[own?.policy.dead,own?.policy.karma,own?.policy.daddy,own?.policy.bash]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -62,7 +67,7 @@ export function Race({id,user}:{id:string;user:{id:string;name:string}}){
     <section className="arena-stage">
      <div className={`stage-frame ${theater.active?"playing":""}`}>
       <Board game={game} userId={user.id} visual={theater.visual} motion={theater.motion} fx={theater.fx} shake={theater.shake} spotlight={theater.spotlight} hot={theater.banner?.kind==="hazard"&&theater.visual?{pos:theater.visual.players[theater.banner.actor]?.pos??0,kind:theater.banner.hazard}:null} round={theater.active?theater.round:undefined}/>
-      <ReplayScene show={theater} game={game}/>
+      <ReplayScene show={theater} game={game} onRoll={theater.roll} onPeek={openCard}/>
       <div className="stage-chips"><span className="stage-chip condition" title={condition.text}><Zap size={14}/><b>{condition.name}</b><i>{condition.text}</i></span><span className="stage-chip" title={direction===1?"Driving clockwise":"Driving counterclockwise"}>{direction===1?"↻":"↺"}</span></div>
       <div className="stage-controls">{theater.active?<button className="stage-button" onClick={theater.skip}><SkipForward size={14}/> Skip</button>:game.replay&&<button className="stage-button" onClick={()=>{fairSound.effect("tap");theater.replay();}}><RotateCcw size={14}/> Replay round {game.replay.round}</button>}</div>
       {finished&&!theater.active&&<div className="finish-card" role="status"><Trophy size={40}/><span className="eyebrow">THE BLUE RIBBON GOES TO</span><h2>{game.winners.map(id=>game.players.find(p=>p.id===id)!.name).join(" & ")}{game.winners.includes(user.id)?" — that’s you!":"!"}</h2><p>{game.players.find(p=>p.id===game.winners[0])?.tickets} tickets · {game.round} rounds of good-natured chaos</p><button className="button red small" onClick={again} disabled={busy}>Race again <ArrowRight size={16}/></button></div>}
@@ -93,6 +98,10 @@ export function Race({id,user}:{id:string;user:{id:string;name:string}}){
       <h3>The lineup <span>tickets</span></h3>
       {[...game.players].map(p=>({p,t:theater.active&&theater.tickets?theater.tickets[p.id]??p.tickets:p.tickets})).sort((a,b)=>b.t-a.t||a.p.seat-b.p.seat).map(({p,t})=>{const flag=game.lastReveal.findIndex(r=>r.id===p.id)+1,reveal=game.lastReveal[flag-1];return <article className={`line-row ${p.id===user.id?"is-you":""} ${theater.spotlight===p.id?"moving":""}`} key={p.id}><span className="line-car"><Car skin={p.skin} mascot={p.mascot} color={p.color} width="38" height="40"/><i style={{background:p.color}}>{p.seat+1}</i>{flag?<b className={`line-flag ${flag===1?"first":""}`} title={flag===1?"Flag 1 last round: moved first and skipped the replacement draw":`Flag ${flag} last round: moved ${flag}${["st","nd","rd"][flag-1]??"th"}`}>F{flag}</b>:null}</span><div><strong>{p.name}{p.id===user.id?" (you)":""}</strong><small><b className="driver-tag">Driver {p.seat+1}</b> · {p.pos===0?"Start":`Sec ${p.pos}`} · Lap {p.lap}{p.lane==="mini"?" · Mini":""}{reveal?` · played ${reveal.primary}`:""}{flag===1?" · no draw":""}</small><small className="line-state">{p.stalled?"Stalled · ":""}{p.skip?"Skips next · ":""}{p.compelled?`Sauron’s curse ×${p.curse} · `:""}{finished?`${p.handCount} cards left`:!p.active?"Sitting out":p.locked?"✓ Locked in":"Choosing…"}</small></div><b key={t} className={`line-score ${theater.active?"counting":""}`}>{t}</b></article>;})}
      </section>
+     {(()=>{const cards=[...game.cards].filter(c=>!(theater.active&&c.round>=theater.round)).reverse().slice(0,8);return cards.length?<details className="rink-log midway-log" open>
+      <summary>Midway cards <small>tap to read</small></summary>
+      <ol>{cards.map((c,i)=>{const p=game.players.find(x=>x.id===c.actor);return <li key={i+"-"+c.round+c.kind}><span>R{c.round}</span><button onClick={()=>openCard(c)}><b className="who-mini" style={{background:p?.color}}>{(p?.seat??0)+1}</b>{p?.name} {c.how==="used"?"used":"drew"} <strong>{EVENTS[c.kind].name}</strong></button></li>;})}</ol>
+     </details>:null;})()}
      <details className="rink-log" open>
       <summary>From the rink <button className="icon-button" aria-label="Refresh race" onClick={e=>{e.preventDefault();void load();}}><RefreshCw size={14}/></button></summary>
       <ol>{[...game.log].reverse().slice(0,40).map(l=><li key={l.id} className={l.kind}><span>R{l.round}</span><p>{l.text}</p></li>)}</ol>
@@ -110,6 +119,7 @@ export function Race({id,user}:{id:string;user:{id:string;name:string}}){
     </aside>
    </main>
    {rules&&<Rules onClose={()=>setRules(false)}/>}
+   {cardView&&<CardPeek card={cardView} game={game} onClose={closeCard}/>}
   </>;
  }
 
