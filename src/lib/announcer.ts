@@ -1,7 +1,6 @@
 // Picks announcer lines for game moments, rotating through the variants so the
 // same line doesn't repeat back to back.
 import type {Condition, EventId} from "./game/catalog";
-import {PAINTS} from "./game/catalog";
 import type {VoClip} from "./audio-manifest";
 
 let turn = 0;
@@ -14,8 +13,6 @@ const MIDWAY: Record<EventId, VoClip> = {
   M13: "midway_m13_token", M14: "midway_m14_hungry_seat", M15: "midway_m15_kid_vomit", M16: "midway_m16_super_bash",
   M17: "midway_m17_double_bash", M18: "midway_m18_rain_delay", M19: "midway_m19_sauron", M20: "midway_m20_oz",
 };
-const COLOURS = ["red", "blue", "yellow", "green", "orange", "purple"] as const;
-const colourName = (hex: string) => COLOURS[Math.max(0, PAINTS.indexOf(hex))];
 
 export const lines = {
   reveal: () => rotate(["round_reveal_1", "round_reveal_2"] as const),
@@ -28,6 +25,6 @@ export const lines = {
   lap: (delta: number): VoClip => delta < 0 ? "lap_backward" : rotate(["lap_complete", "lap_another"] as const),
   midway: (kind: EventId) => MIDWAY[kind],
   rink: (c: Condition) => `rink_${c}` as VoClip,
-  lead: (hex: string) => `lead_${colourName(hex)}` as VoClip,
-  win: (hex: string) => `win_${colourName(hex)}` as VoClip,
+  /** "Driver two!" Names the driver (by their fixed race number) an event is happening to. */
+  who: (seat: number): VoClip => (["who_1", "who_2", "who_3", "who_4", "who_5", "who_6"] as const)[Math.min(5, Math.max(0, seat))],
 };

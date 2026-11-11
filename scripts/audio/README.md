@@ -6,3 +6,4 @@
 - `src/lib/audio-manifest.ts` lists effect variant counts and announcer clip lengths; regenerate it after changing the audio.
 
 Paths inside the scripts point at the build machine; pass your own source folders as arguments.
+- `driver-callouts-elevenlabs.txt` is the script for the driver callouts (`who_1` … `who_6` = "Driver one!" … "Driver six!", and `pay_up`). They were cut from `ElevenLabs_Driver.mp3` (Nov 11) at the silences, checked with PocketSphinx, set 2.5 dB quieter to match the other lines and encoded as 80 kbps mono MP3. The leading laugh before "Pay up!" was left out to keep the line short. The colour lines `lead_<colour>` and `win_<colour>` were retired because a skin can change a car's colour.

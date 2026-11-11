@@ -28,7 +28,7 @@ export const CONDITIONS = {
   rain:{name:"Rain on the Rink",text:"Grease slides you 4 instead of 2.",icon:"drop"},
   rampage:{name:"Rusty’s Rampage",text:"Rusty takes two moves this round.",icon:"car"},
   overdrive:{name:"Tilt-A-Whirl Overdrive",text:"Tilt spins move 5 instead of 3.",icon:"swirl"},
-  judging:{name:"Blue Ribbon Judging",text:"Player-owned bashes earn 2 tickets. Rusty’s bounty stays 2.",icon:"award"},
+  judging:{name:"Blue Ribbon Judging",text:"A driver’s bash costs the victim 2 tickets. Rusty still takes 1, and his bounty stays 2.",icon:"award"},
   fireworks:{name:"Fireworks Show",text:"Doubles draw 2 Midway cards per driver.",icon:"sparkles"},
   bumper:{name:"Bumper-to-Bumper",text:"Bash knockback gets +2 spaces.",icon:"car"},
   lights:{name:"Lights Out",text:"No BOOST cards this round. Defenses still work.",icon:"plug"},

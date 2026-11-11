@@ -2,7 +2,7 @@
 // Overlays drawn over the rink while a round plays back.
 import {CONDITIONS, EVENTS} from "@/lib/game/catalog";
 import type {PublicGame} from "@/lib/game/engine";
-import type {Theater} from "./use-round-replay";
+import type {Caption, CaptionPart, Theater} from "./use-round-replay";
 import {EventArt, HazardArt} from "./card-art";
 
 const HAZARD_TEXT = {
@@ -11,7 +11,19 @@ const HAZARD_TEXT = {
   dead: {title: "Dead Zone!", result: {paid: "Paid to keep rolling", skip: "Sits out next round"}},
 } as const;
 
-export function ReplayScene({show, game}: {show: Theater; game: PublicGame}) {
+/** The play-by-play line: driver chips (seat number in their paint colour, then name) and text. */
+export function PlayCall({caption, game, className = "playcall"}: {caption: Caption | null; game: PublicGame; className?: string}) {
+  if (!caption) return null;
+  const chip = (part: CaptionPart, i: number) => {
+    if (typeof part === "string") return <span key={i}>{part}</span>;
+    const p = game.players.find(x => x.id === part.who);
+    if (!p) return <b key={i} className="who rusty">Rusty</b>;
+    return <b key={i} className="who" style={{"--paint": p.color} as React.CSSProperties}><i>{p.seat + 1}</i>{p.name}</b>;
+  };
+  return <p key={caption.id} className={`${className} ${caption.tone ?? ""}`} role="status">{caption.parts.map(chip)}</p>;
+}
+
+export function ReplayScene({show, game, hideCaption}: {show: Theater; game: PublicGame; hideCaption?: boolean}) {
   if (!show.active) return null;
   const player = (id: string) => game.players.find(p => p.id === id);
   const name = (id: string) => player(id)?.name ?? "Rusty";
@@ -25,10 +37,12 @@ export function ReplayScene({show, game}: {show: Theater; game: PublicGame}) {
             return (
               <li key={r.actor} className={`${up ? "up" : ""} ${show.spotlight === r.actor ? "active" : ""}`} style={{"--paint": p?.color} as React.CSSProperties}>
                 <span className="tray-seat">{(p?.seat ?? 0) + 1}</span>
+                <span className="tray-flag" title={`Flag ${i + 1}: moves ${i === 0 ? "first" : `${i + 1}${["st", "nd", "rd"][i] ?? "th"}`}`}>F{i + 1}</span>
                 <strong>{up ? r.value : "?"}</strong>
                 {up && r.extra ? <small>+{r.extra}</small> : null}
                 {up && r.boost ? <em title={EVENTS[r.boost].name}>★</em> : null}
-                <span className="sr-only">{name(r.actor)} {up ? `plays ${r.value}` : "card face down"}</span>
+                {up && r.auto ? <em className="tray-auto" title="Time ran out: lowest card played">⏱</em> : null}
+                <span className="sr-only">Flag {i + 1}: {name(r.actor)} {up ? `plays ${r.value}` : "card face down"}</span>
               </li>
             );
           })}
@@ -36,6 +50,8 @@ export function ReplayScene({show, game}: {show: Theater; game: PublicGame}) {
       )}
 
       {b?.kind === "go" && <div className="go-flag" role="status"><span>GO!</span></div>}
+
+      {!hideCaption && <PlayCall caption={show.caption} game={game}/>}
 
       {b?.kind === "doubles" && (
         <div className="doubles-celebration" role="status">

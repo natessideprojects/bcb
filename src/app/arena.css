@@ -118,7 +118,18 @@ body:has(.arena){overflow:hidden}
 .reveal-tray li:not(.up) strong{color:#9aa6cf;font-size:16px}
 .reveal-tray small{position:absolute;bottom:1px;font:700 9px var(--font-friendly),sans-serif;color:#2c7258}
 .reveal-tray em{position:absolute;top:0;right:3px;color:#d6a21e;font-style:normal;font-size:11px}
+.reveal-tray em.tray-auto{top:auto;bottom:1px;left:2px;right:auto;font-size:10px}
 .tray-seat{position:absolute;top:-7px;left:-7px;width:17px;height:17px;border-radius:50%;background:var(--paint);border:2px solid #fff;color:#fff;font:700 9px/13px var(--font-friendly),sans-serif;text-align:center}
+.tray-flag{position:absolute;top:-8px;right:-6px;padding:0 3px;border-radius:3px 6px 6px 3px;background:#ffc854;border:1.5px solid #24283f;color:#24283f;font:800 8px/11px var(--font-friendly),sans-serif;letter-spacing:.3px}
+/* Play-by-play: who is doing what, under the rink */
+.playcall{position:absolute;left:50%;top:61%;transform:translateX(-50%);width:max-content;max-width:42%;margin:0;padding:6px 12px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2px 0;background:#24283fef;border:2px solid #c48a3b;border-radius:12px;box-shadow:0 4px 12px #0006;color:#fff2d5;font:700 14px/1.35 var(--font-friendly),sans-serif;text-align:center;animation:playcall-in .25s ease-out}
+.playcall.bash{border-color:#ed493a}.playcall.good{border-color:#5fae5a}.playcall.bad{border-color:#d9981d}
+.playcall>span{white-space:pre-wrap}
+.dock-status .dock-playcall{display:none}
+.playcall .who{display:inline-flex;align-items:center;gap:4px;margin:0 2px;padding:1px 8px 1px 2px;border-radius:999px;background:color-mix(in srgb,var(--paint) 30%,#24283f);border:1.5px solid var(--paint);color:#fff;white-space:nowrap}
+.playcall .who i{width:17px;height:17px;border-radius:50%;background:var(--paint);border:1.5px solid #fff;font:800 10px/14px var(--font-friendly),sans-serif;font-style:normal;text-align:center}
+.playcall .who.rusty{--paint:#8a7f74;padding-left:8px}
+@keyframes playcall-in{from{transform:translate(-50%,8px);opacity:0}to{transform:translate(-50%,0);opacity:1}}
 .go-flag{position:absolute;inset:0;display:grid;place-items:center}
 .go-flag span{font-family:var(--display);font-size:clamp(54px,14cqw,150px);color:#ffe0a1;text-shadow:4px 6px 0 #7d282a,-2px -2px 0 #fff5d8;animation:go-zoom .9s ease-out forwards;padding:0 28px;background:repeating-conic-gradient(#172c43 0 25%,#fff 0 50%) 0 0/26px 26px;-webkit-background-clip:padding-box;border-radius:14px;box-shadow:inset 0 0 0 999px #d84233e0,0 8px 0 #7d282a}
 .midway-reveal,.sign-flip,.finish-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;box-shadow:0 14px 30px #16234066}
@@ -190,10 +201,16 @@ body:has(.arena){overflow:hidden}
 .line-car{position:relative;width:40px;height:40px}
 .line-car svg{width:40px;height:42px}
 .line-car i{position:absolute;right:-3px;bottom:-1px;width:15px;height:15px;border-radius:50%;border:2px solid #fff;color:#fff;font:700 9px/12px var(--font-friendly),sans-serif;text-align:center;font-style:normal}
+.line-flag{position:absolute;left:-4px;top:-3px;padding:0 3px;border-radius:3px 6px 6px 3px;background:#f3e2bf;border:1.5px solid #8a6a43;color:#5a3b22;font:800 8px/11px var(--font-friendly),sans-serif}
+.line-flag.first{background:#ffc854;border-color:#24283f;color:#24283f}
 .line-row strong{display:block;font-size:13px;line-height:1.2;color:#24283f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .line-row small{display:block;font-size:11px;line-height:1.25;color:#766855;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .line-row .line-state{color:#3b634e}
-.line-score{font-family:var(--display);font-size:20px;color:#d84233}
+.line-row .driver-tag{color:#24283f;font-weight:800}
+.line-score{font-family:var(--display);font-size:20px;color:#d84233;transition:transform .2s}
+.line-score.counting{animation:score-pop .5s ease-out}
+@keyframes score-pop{40%{transform:scale(1.35)}}
+
 .rink-log{flex:1 1 0;min-height:90px;overflow:auto}
 .rink-log>summary,.responses-panel>summary{position:sticky;top:0;z-index:1;background:#fff8e6;padding:8px 12px;font-family:var(--display);font-size:13px;color:#24283f;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;list-style:none}
 .rink-log>summary::-webkit-details-marker,.responses-panel>summary::-webkit-details-marker{display:none}
@@ -247,6 +264,15 @@ body:has(.arena){overflow:hidden}
  .stage-controls{right:6px;top:6px}
  .stage-button{font-size:10px;padding:3px 9px}
  .reveal-tray{top:auto;bottom:6px;gap:5px;padding:4px 6px}
+ /* On phones the island is too small: the play-by-play moves into the hand panel. */
+ .playcall{display:none}
+ .dock-status .dock-playcall{display:flex;flex-wrap:wrap;align-items:center;gap:2px 0;margin:4px 0 0;padding:3px 7px;border-radius:9px;background:#24283f;color:#fff2d5;font:700 11px/1.35 var(--font-friendly),sans-serif;border:1.5px solid #c48a3b}
+ .dock-playcall.bash{border-color:#ed493a}.dock-playcall.good{border-color:#5fae5a}.dock-playcall.bad{border-color:#d9981d}
+ .dock-playcall>span{white-space:pre-wrap}
+ .dock-playcall .who{display:inline-flex;align-items:center;gap:3px;margin:0 2px;padding:0 6px 0 1px;border-radius:999px;background:color-mix(in srgb,var(--paint) 30%,#24283f);border:1.5px solid var(--paint);white-space:nowrap}
+ .dock-playcall .who i{width:14px;height:14px;border-radius:50%;background:var(--paint);border:1.5px solid #fff;font:800 8px/11px var(--font-friendly),sans-serif;font-style:normal;text-align:center}
+ .dock-playcall .who.rusty{--paint:#8a7f74;padding-left:6px}
+ .dock-status:has(.dock-playcall)>p:not(.dock-playcall){display:none}
  .reveal-tray li{width:28px;height:38px}
  .reveal-tray strong{font-size:15px}
  .callout{top:38px;font-size:10px;padding:4px 10px 4px 6px}
@@ -298,6 +324,9 @@ body:has(.arena){overflow:hidden}
 .tutor-bubble strong{display:block;font-family:var(--display);font-size:16px;color:#d84233;margin-bottom:2px}
 .tutor-bubble p{margin:0}
 .tutor-bubble button{margin-top:7px;float:right;display:inline-flex;align-items:center;gap:3px;border:0;background:#ffc854;color:#24283f;font:700 12px var(--font-friendly),sans-serif;border-radius:999px;padding:3px 10px;cursor:pointer;box-shadow:0 2px 0 #a8692b}
+.tutor-bubble button.waiting{animation:next-nudge 1.6s ease-in-out infinite}
+@keyframes next-nudge{0%,70%,100%{transform:none}80%{transform:translateX(3px)}90%{transform:translateX(-1px)}}
+@media (prefers-reduced-motion:reduce){.tutor-bubble button.waiting{animation:none}}
 .tutor-bubble:after{content:"";position:absolute;left:50%;width:18px;height:18px;background:#fffdf5;border:3px solid #24283f;transform:translateX(-50%) rotate(45deg)}
 .tutor-bubble.above{transform:translate(-50%,-100%)}
 .tutor-bubble.above:after{bottom:-11px;border-top:0;border-left:0}

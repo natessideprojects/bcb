@@ -1,0 +1,43 @@
+# Bumper Car Bash: driver callouts (updated 2026-11-11)
+# Drivers are called by their race number (1-6), never by colour, because a car
+# skin from the Prize Booth can change a car's colour. Same announcer voice as
+# announcer-script-elevenlabs.txt.
+#
+# Save each line as its own clip, named exactly like this, in public/audio/vo/:
+#   Driver one! ... Driver six!  ->  who_1.mp3 ... who_6.mp3
+#   Pay up!                      ->  pay_up.mp3
+# Recorded 2026-11-11 (ElevenLabs_Driver.mp3) and cut into the clips above.
+# Keep each clip short (about a second) so it fits ahead of the event line.
+#
+# How the game strings them together:
+#   "Driver two!" + "BASH!"                              (a bash)
+#   "Driver three!" + "Pay up!"                          (the bashed car hands over a ticket)
+#   "Driver four!" + "Grease puddle! Slip-sliding away!" (hazards, laps, Midway cards, stalls)
+#   "We've got a new leader!" + "Driver one!"            (lead change)
+#   "Driver two!" + "You win the Blue Ribbon!"           (winner)
+
+[excited] Driver one!
+
+...
+
+[excited] Driver two!
+
+...
+
+[excited] Driver three!
+
+...
+
+[excited] Driver four!
+
+...
+
+[excited] Driver five!
+
+...
+
+[excited] Driver six!
+
+...
+
+[laughs] Pay up!
