@@ -13,7 +13,7 @@ export const trackSize=(g:{trackLength?:number})=>g.trackLength||28;
 export const gameMap=(g:{trackLength?:number;map:MapId})=>trackSize(g)===16?(g.map==="day"?{...MAPS.day,grease:[3,11],tilt:[5,13],dead:[8,16]}:{...MAPS.night,grease:[4,12],tilt:[7,15],dead:[1,9]}):trackSize(g)===18?(g.map==="day"?{...MAPS.day,grease:[3,12],tilt:[6,15],dead:[9,18]}:{...MAPS.night,grease:[4,13],tilt:[7,16],dead:[1,10]}):MAPS[g.map];
 const pose=(p:Pose):Pose=>({pos:p.pos,lap:p.lap,lane:p.lane});
 const visual=(g:Game):Visual=>({players:Object.fromEntries(g.players.map(p=>[p.id,pose(p)])),rusty:g.rusty,direction:g.direction,condition:g.condition,milestone:g.milestone});
-export type Player={skin?:string;mascot?:string|null;lastMidway?:Midway[];id:string;name:string;seat:number;color:string;bot:boolean;pos:number;lap:number;lane:"main"|"mini";tickets:number;hand:Speed[];held:Midway[];skip:boolean;stalled:boolean;shrink:number;compelled:boolean;active:boolean;policy:Policy;misses:number;stats?:{bashes:number;doubles:number;laps:number}};
+export type Player={skin?:string;mascot?:string|null;lastMidway?:Midway[];id:string;name:string;seat:number;color:string;bot:boolean;pos:number;lap:number;lane:"main"|"mini";tickets:number;hand:Speed[];held:Midway[];skip:boolean;stalled:boolean;shrink:number;compelled:boolean;curse?:number;active:boolean;policy:Policy;misses:number;stats?:{bashes:number;doubles:number;laps:number}};
 export type Log={id:number;round:number;text:string;kind:"move"|"bash"|"event"|"round"|"condition"};
 export type Game={rules:"3.3"|"3.4";trackLength?:16|18|28;replay?:RoundReplay;phase:"pick"|"midway"|"finished";manualMidway?:boolean;presentationSeq?:number;midway?:{starter?:boolean;queue:{actor:string;card:Midway}[];revealed:boolean;delta:Record<string,number>;played:Speed[];boosts:Midway[]};map:MapId;pace:"relaxed"|"quick";direction:1|-1;firstSeat:number;nextFirstSeat:number|null;round:number;limit:number;players:Player[];rusty:number;condition:Condition;conditionDeck:Condition[];conditionDiscard:Condition[];milestone:number;highLap:number;speedDeck:Speed[];speedDiscard:Speed[];eventDeck:Midway[];eventDiscard:Midway[];picks:Record<string,Pick>;flags:string[];log:Log[];logSeq:number;deadline:number;final:boolean;lastReveal:{id:string;primary:number;extra?:number;boost?:EventId}[];winners:string[]};
 export type Rng=()=>number;
@@ -140,7 +140,7 @@ class Referee {
         for(const v of redraw)this.drawSpeed(v,counts.get(v.id));
         this.note(`Rain Delay resets the two legacy decks. ${this.g.players[first].name} starts the redraw; held Midway cards and the Rink Condition stay.`);break;
       }
-      case "M19":p.compelled=true;break;
+      case "M19":{p.compelled=true;p.curse=sauronRounds(this.g);this.note(`Sauron watches ${p.name} for ${p.curse} rounds: only a direct bash moves them, and landing one breaks the curse early.`);break;}
       case "M20":this.g.direction=this.g.direction===1?-1:1;this.note(`The rink reverses! Forward is now ${this.g.direction===1?"clockwise":"counterclockwise"}. All cars stay on their spaces.`);break;
     }});
     this.g.eventDiscard.push(card);
@@ -151,6 +151,7 @@ class Referee {
     for(const p of this.seatOrder()){const skipped=p.skip;p.skip=false;p.active=!skipped;if(skipped)this.note(`${p.name} sits out this round.`);if(p.stalled&&!skipped){if(p.policy.daddy==="escape"&&this.use(p,"M12")){p.stalled=false;}else{const roll=this.die();p.stalled=roll<4;this.note(`${p.name} rolls ${roll} to escape: ${p.stalled?"still stalled":"back in action"}.`);}}p.active=p.active&&!p.stalled;}
     for(const p of g.players.filter(p=>p.bot&&p.active)){const primary=p.hand[Math.floor(this.random()*p.hand.length)];if(!primary)throw new GameError("A driver has no cards.");g.picks[p.id]={primary:primary.id};}
   }
+  sauronCountdown(){for(const p of this.g.players){if(!p.compelled){p.curse=undefined;continue;}p.curse=(p.curse??sauronRounds(this.g))-1;if(p.curse<=0){p.compelled=false;p.curse=undefined;this.note(`Sauron looks away. ${p.name} can drive freely again.`);}else this.note(`Sauron's curse on ${p.name}: ${p.curse} round${p.curse===1?"":"s"} left.`);}}
   resolve(now:number){
     const g=this.g;this.delta={};g.replay={sequence:g.presentationSeq=(g.presentationSeq||0)+1,round:g.round,initial:visual(g),events:[]};const active=g.players.filter(p=>p.active);
     const cards=new Map(active.map(p=>[p.id,p.hand.find(c=>c.id===g.picks[p.id].primary)!]));
@@ -165,6 +166,7 @@ class Referee {
     for(const p of order){const pick=g.picks[p.id],primary=cards.get(p.id)!,extra=p.hand.find(c=>c.id===pick.extra),boost=p.held.find(c=>c.id===pick.boost);moves.set(p.id,{primary,extra,boost});p.hand=p.hand.filter(c=>c.id!==primary.id&&c.id!==extra?.id);if(boost){p.held=p.held.filter(c=>c.id!==boost.id);boosts.push(boost);}played.push(primary);if(extra)played.push(extra);if(!p.hand.length)g.final=true;g.lastReveal.push({id:p.id,primary:primary.value,extra:extra?.value,boost:boost?.kind});this.note(`${p.name} reveals ${primary.value}${boost?" + "+EVENTS[boost.kind].name:""}.`,"move");}
     const mod=(v:number)=>Math.max(1,v+(g.condition==="surge"?1:g.condition==="brownout"?-1:0));
     for(const p of order){const m=moves.get(p.id)!;if(p.stalled){this.note(`${p.name}'s committed movement is canceled by the stall.`);continue;}const base=m.boost?.kind==="M10"?11:m.primary.value+(m.boost?.kind==="M05"?m.extra!.value:0);this.speed(p,mod(base));if(m.boost?.kind==="M09"&&!p.stalled)this.speed(p,mod(m.extra!.value));}
+    this.sauronCountdown();
     for(let i=0;i<(g.condition==="rampage"?2:1);i++){const roll=this.die();const path:Pose[]=[{pos:g.rusty,lap:0,lane:"main"}];for(let step=0;step<roll;step++)path.push({pos:this.wrap(g.rusty-(step+1)*g.direction),lap:0,lane:"main"});this.emit({type:"travel",actor:"rusty",path});g.rusty=path.at(-1)!.pos;this.note(`Rusty rolls ${roll} and reverses to ${g.rusty}.`,"move");const victims=g.players.filter(p=>p.pos===g.rusty).sort((a,b)=>a.seat-b.seat);this.chain(null,c=>{for(const p of victims)if(p.pos===g.rusty&&!c.hit.has(p.id))this.bash(p,null,c);});}
     if(g.manualMidway && pending.size){
       g.midway={queue:this.ordered().flatMap(p=>(pending.get(p.id)||[]).map(card=>({actor:p.id,card}))),revealed:false,delta:{...this.delta},played,boosts};
@@ -256,11 +258,13 @@ export function advanceGame(g:Game,random:Rng,now=Date.now()){
 
 export function publicGame(g:Game,viewer:string){
   return {midway:g.midway?{starter:!!g.midway.starter,actor:g.midway.queue[0]?.actor,pending:g.midway.queue.length,revealed:g.midway.revealed}:null,rules:g.rules,trackLength:trackSize(g),replay:g.replay||null,phase:g.phase,map:g.map,pace:g.pace,direction:g.direction,firstSeat:g.firstSeat,round:g.round,limit:g.limit,rusty:g.rusty,condition:g.condition,milestone:g.milestone,deadline:g.deadline,flags:g.flags,lastReveal:g.lastReveal,log:g.log,winners:g.winners,
-    players:g.players.map(p=>({id:p.id,name:p.name,seat:p.seat,color:p.color,skin:p.skin,mascot:p.mascot,bot:p.bot,pos:p.pos,lap:p.lap,lane:p.lane,tickets:p.tickets,skip:p.skip,stalled:p.stalled,shrink:p.shrink,compelled:p.compelled,active:p.active,handCount:p.hand.length,heldCount:p.held.length,locked:!!g.picks[p.id]})),
+    players:g.players.map(p=>({id:p.id,name:p.name,seat:p.seat,color:p.color,skin:p.skin,mascot:p.mascot,bot:p.bot,pos:p.pos,lap:p.lap,lane:p.lane,tickets:p.tickets,skip:p.skip,stalled:p.stalled,shrink:p.shrink,compelled:p.compelled,curse:p.compelled?p.curse??g.players.length:0,active:p.active,handCount:p.hand.length,heldCount:p.held.length,locked:!!g.picks[p.id]})),
     me:(()=>{const p=g.players.find(p=>p.id===viewer);return p?{drawn:g.midway?.revealed&&g.midway.queue[0]?.actor===viewer?g.midway.queue[0].card:null,lastMidway:p.lastMidway||[],hand:p.hand,held:p.held,policy:p.policy,pick:g.picks[viewer]||null}:null;})(),
     decks:{speed:g.speedDeck.length,midway:g.eventDeck.length,conditions:g.conditionDeck.length}
   };
 }
+/** Sauron's curse lasts one round per driver in the race (2 rounds with 2 drivers, 3 with 3…). */
+export const sauronRounds=(g:{players:unknown[]})=>Math.max(2,g.players.length);
 export type PublicGame=ReturnType<typeof publicGame>;
 
 // Test-only entry point for deterministic rule scenarios. Production commands

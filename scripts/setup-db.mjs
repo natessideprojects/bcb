@@ -1,6 +1,6 @@
 import postgres from 'postgres';
 if(!process.env.DATABASE_URL) throw Error('DATABASE_URL is missing');
-const sql=postgres(process.env.DATABASE_URL,{ssl:{rejectUnauthorized:true},max:1,prepare:false,connect_timeout:20});
+const sql=postgres(process.env.DATABASE_URL,{ssl:process.env.PGSSLMODE==="disable"?false:{rejectUnauthorized:true},max:1,prepare:false,connect_timeout:20});
 try{
   await sql`
     CREATE TABLE IF NOT EXISTS bcb_rooms (

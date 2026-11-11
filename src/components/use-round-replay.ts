@@ -28,15 +28,20 @@ export type Theater = {
   active: boolean; round: number; visual: Visual | null; motion: Record<string, Motion>; fx: Fx[];
   banner: Banner | null; reveals: Reveal[]; revealed: number; spotlight: string | null; shake: string | null;
 };
+/** A narration hook point: the tutorial uses these to time its speech bubbles. */
+export type Beat = {type: "event"; event: ReplayEvent; index: number} | {type: "go"} | {type: "end"};
+export type ReplayHooks = {onBeat?: (beat: Beat) => Promise<void> | void; noCutoff?: boolean};
 const idle: Theater = {active: false, round: 0, visual: null, motion: {}, fx: [], banner: null, reveals: [], revealed: 0, spotlight: null, shake: null};
 const copy = (v: Visual): Visual => ({...v, players: Object.fromEntries(Object.entries(v.players).map(([id, p]) => [id, {...p}]))});
 const ease = (t: number) => 0.5 - Math.cos(Math.PI * t) / 2;
 let fxSeq = 0;
 
-export function useRoundReplay(game: PublicGame | undefined, userId: string) {
+export function useRoundReplay(game: PublicGame | undefined, userId: string, hooks?: ReplayHooks) {
   const [show, setShow] = useState<Theater>(idle);
   const token = useRef(0), previous = useRef<string | null>(null), latest = useRef(game), tickets = useRef<Record<string, number>>({});
   latest.current = game;
+  const hooksRef = useRef(hooks);
+  hooksRef.current = hooks;
 
   const cutoff = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skip = useCallback(() => { if (cutoff.current) clearTimeout(cutoff.current); token.current++; fairSound.cancel(); setShow(idle); }, []);
@@ -44,11 +49,14 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
   const run = useCallback(async (replay: RoundReplay, before: Record<string, number>) => {
     if (cutoff.current) clearTimeout(cutoff.current);
     const mine = ++token.current;
-    cutoff.current = setTimeout(() => { if (token.current === mine) skip(); }, replayBudget(replay));
+    if (!hooksRef.current?.noCutoff) cutoff.current = setTimeout(() => { if (token.current === mine) skip(); }, replayBudget(replay));
     fairSound.cancel();
     const alive = () => token.current === mine;
+    // Ending the show retires this run's token, so effect timers that fire later
+    // (ticket floaters, sparkles) can never switch replay mode back on and lock the hand.
+    const finish = () => { if (!alive()) return; if (cutoff.current) clearTimeout(cutoff.current); token.current++; setShow(idle); };
     const g = latest.current;
-    if (!g) return;
+    if (!g) { finish(); return; }
     const length = g.trackLength || 28;
     const seat = (id: string) => g.players.find(p => p.id === id)?.seat ?? 0;
     const colour = (id: string) => g.players.find(p => p.id === id)?.color ?? "#ec4c3e";
@@ -87,14 +95,11 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
       sfx("go"); say(lines.go(), 3);
       if (!(await wait(GO_BEAT))) return false;
       state.banner = null; paint();
-      return true;
+      await hooksRef.current?.onBeat?.({type: "go"});
+      return alive();
     };
 
-    for (const e of replay.events) {
-      if (!alive()) return;
-      if (fairSound.get().animation === "off") { skip(); return; }
-      if (e.type !== "reveal" && e.type !== "doubles" && e.type !== "draw" && e.type !== "condition" && !(await go())) return;
-
+    const playEvent = async (e: ReplayEvent): Promise<boolean> => {
       switch (e.type) {
         case "reveal": {
           if (state.revealed === 0) say(lines.reveal(), 2);
@@ -106,16 +111,16 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
         case "doubles": {
           state.banner = {kind: "doubles", actors: e.actors, value: e.value}; paint();
           fairSound.doubles(); say(lines.doubles(), 2);
-          if (!(await wait(eventDuration(e)))) return;
+          if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
-          continue;
+          return true;
         }
         case "travel": {
           lastKnock = lastBashVictim === e.actor;
-          if (!(await drive(e))) return;
+          if (!(await drive(e))) return false;
           if (lastKnock && e.path.length - 1 >= 5) say("bash_far", 1);
           lastBashVictim = null;
-          continue;
+          return true;
         }
         case "bash": {
           const at = e.victim === "rusty" ? rustySlot(view.rusty, length) : where(e.victim);
@@ -126,9 +131,9 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
           else { sfx("bash"); sfx("bonk", {delay: 60, volume: 0.6}); say(chain ? "bash_chain" : lines.bash(), 2); }
           if (mineHit(e.victim)) sfx("aww", {delay: 250, volume: 0.8}); else sfx("roar", {delay: 120, volume: 0.55});
           lastBashVictim = e.victim;
-          if (!(await wait(eventDuration(e)))) return;
+          if (!(await wait(eventDuration(e)))) return false;
           state.shake = null; paint();
-          continue;
+          return true;
         }
         case "hazard": {
           const at = slotPoint(seat(e.actor), e.pos, e.lane, length);
@@ -138,9 +143,9 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
           if (e.kind === "tilt") { sfx("tilt"); say(e.result === "forward" ? "hazard_tilt_forward" : e.result === "back" ? "hazard_tilt_back" : "hazard_tilt_stay", 2); }
           if (e.kind === "dead") { sfx("dead"); say(e.result === "paid" ? "hazard_dead_paid" : "hazard_dead_sitout", 2); if (e.result === "skip") sfx("aww", {delay: 400, volume: 0.6}); }
           paint();
-          if (!(await wait(eventDuration(e)))) return;
+          if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
-          continue;
+          return true;
         }
         case "tickets": {
           const at = where(e.actor);
@@ -161,18 +166,18 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
           if (e.kind === "M13" || e.kind === "M02" || e.kind === "M16") sfx("cheer", {delay: 600, volume: 0.45});
           say(lines.midway(e.kind), 2);
           paint();
-          if (!(await wait(eventDuration(e)))) return;
+          if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
-          continue;
+          return true;
         }
         case "stall": {
           fx(e.pileup ? "pileup" : "stall", slotPoint(seat(e.actor), e.pos, view.players[e.actor]?.lane ?? "main", length));
           state.banner = {kind: "stall", actor: e.actor, pileup: e.pileup};
           sfx(e.pileup ? "pileup" : "stall"); say(e.pileup ? "stall_pileup" : "stall_out", 2);
           paint();
-          if (!(await wait(eventDuration(e)))) return;
+          if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
-          continue;
+          return true;
         }
         case "lap": {
           const at = where(e.actor);
@@ -182,9 +187,9 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
           sfx(e.delta > 0 ? "cheer" : "aww", {delay: 200, volume: 0.5});
           say(lines.lap(e.delta), 2);
           paint();
-          if (!(await wait(eventDuration(e)))) return;
+          if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
-          continue;
+          return true;
         }
         case "condition": {
           view.condition = e.condition;
@@ -193,16 +198,24 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
           say("rink_new", 3); say(lines.rink(e.condition), 2);
           if (e.condition === "rampage") sfx("alarm", {delay: 900});
           paint();
-          if (!(await wait(eventDuration(e)))) return;
+          if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
-          continue;
+          return true;
         }
         case "draw": {
           if (e.actor === userId) sfx("draw", {volume: 0.6});
           break;
         }
       }
-      if (!(await wait(eventDuration(e)))) return;
+      return wait(eventDuration(e));
+    };
+    for (const [index, e] of replay.events.entries()) {
+      if (!alive()) return;
+      if (fairSound.get().animation === "off") { skip(); return; }
+      if (e.type !== "reveal" && e.type !== "doubles" && e.type !== "draw" && e.type !== "condition" && !(await go())) return;
+      const hold = hooksRef.current?.onBeat?.({type: "event", event: e, index});
+      if (!(await playEvent(e))) return;
+      if (hold) { await hold; if (!alive()) return; }
     }
     if (!alive()) return;
     if (!(await go())) return;
@@ -230,8 +243,8 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string) {
       else if (final.players.some(p => p.active && p.handCount <= 1)) say("end_final_round", 2);
       else say(lines.pick(), 1);
     }
-    if (cutoff.current) clearTimeout(cutoff.current);
-    setShow(idle);
+    await hooksRef.current?.onBeat?.({type: "end"});
+    finish();
 
     // One car (or Rusty) drives its hidden route from bay to bay.
     async function drive(e: Extract<ReplayEvent, {type: "travel"}>) {

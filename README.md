@@ -18,7 +18,9 @@ The interface follows the design guide and tabletop concept: Bungee display lett
 
 ## Playtest limits
 
-Rooms require a signed-in member; a secret invitation admits another signed-in player while the lobby is open. Hidden cards and pending picks are filtered on the server. Round commands are serialized in database transactions. A host can add bots, remove waiting guests, and start after everyone is ready.
+Rooms require a driver: either a signed-in account or a guest. Guest play needs no sign-up: a visitor picks a driver name and gets a random `guest-…` id in a signed, HttpOnly cookie (HMAC keyed from `NEON_AUTH_COOKIE_SECRET`, 90 days). Guests can host, join invitations and use the Prize Booth; their progress stays in that browser and they are kept off the public ladder. A secret invitation admits another driver while the lobby is open. Hidden cards and pending picks are filtered on the server. Round commands are serialized in database transactions. A host can add bots, remove waiting guests, and start after everyone is ready.
+
+`/tutorial` is a two-minute scripted race on the real rink and replay engine. Speech bubbles explain picking, reveal order, bashes, knockback, tickets, all three hazards, Rusty, Doubles, Midway boosts and instants, laps, the Rusty bounty and Rink Conditions. Sauron Bash lasts one round per driver in the race (2 rounds with 2 drivers, 3 with 3, and so on); landing a direct bash breaks it early.
 
 Free Vercel Hobby and Neon plans were selected; free-tier quotas still apply. Deadlines catch up on the next member request. There are no push notifications, public matchmaking or paid upgrades. Bots make basic choices; human balance and usability testing remain necessary.
 

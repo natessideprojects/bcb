@@ -97,3 +97,13 @@ test("Lead Foot Bash still moves a trailing driver one space past the leader",()
   assert.equal(driver.lap,0);
   assert.equal(driver.stats?.bashes,2);
 });
+test("Sauron's curse lasts one round per driver, then lifts without a bash",()=>{
+ const g=fresh();g.condition="free";g.players[0].pos=2;g.players[1].pos=19;g.rusty=14;const p=g.players[0];scenario(g,"M19",p.id,seeded(1));
+ assert.equal(p.compelled,true);assert.equal(p.curse,2);assert.equal(publicGame(g,p.id).players[0].curse,2);
+ for(let r=0;r<2;r++){g.condition="free";p.hand[0].value=10;g.players[1].hand[0].value=1;const round=g.round;for(const v of g.players)submitPick(g,v.id,{primary:v.hand[0].id},round,()=>.5,1001+r);
+  if(r===0){assert.equal(p.compelled,true);assert.equal(p.curse,1);}}
+ assert.equal(p.compelled,false);assert.equal(p.curse,undefined);assert.ok(g.log.some(l=>l.text.includes("Sauron looks away")));
+});
+test("Sauron's curse length follows the number of drivers",()=>{
+ for(const n of [2,3,4,6]){const g=fresh(n,7);scenario(g,"M19",g.players[0].id,seeded(2));assert.equal(g.players[0].curse,n);}
+});

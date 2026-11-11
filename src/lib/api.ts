@@ -1,6 +1,14 @@
 import {auth} from "./auth/server";
 import {HttpError,type User} from "./rooms";
-export async function requireUser():Promise<User>{const {data}=await auth.getSession();if(!data?.user)throw new HttpError(401,"Sign in to enter the fairground.");return {id:data.user.id,name:data.user.name||"Driver",isTest:!!data.user.email?.endsWith("@example.invalid")};}
+import {readGuest} from "./guest";
+/** The signed-in account, or the guest driver from this browser's guest cookie. */
+export async function currentUser():Promise<User|null>{
+  let data:Awaited<ReturnType<typeof auth.getSession>>["data"]=null;
+  try{({data}=await auth.getSession());}catch(e){console.error("Account session check failed; continuing as guest",(e as Error)?.message);}
+  if(data?.user)return {id:data.user.id,name:data.user.name||"Driver",isTest:!!data.user.email?.endsWith("@example.invalid")};
+  return readGuest();
+}
+export async function requireUser():Promise<User>{const u=await currentUser();if(!u)throw new HttpError(401,"Sign in or play as a guest to enter the fairground.");return u;}
 export function sameOrigin(request:Request){
   const supplied=request.headers.get("origin"),url=new URL(request.url);
   // Next's dev listener may normalize request.url to 0.0.0.0. Validate the

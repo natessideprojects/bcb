@@ -18,7 +18,7 @@ export const EVENTS = {
   M16: {name:"Super Bash", type:"BASH", count:1, icon:"zap", text:"After you bash one opponent, triple their knockback distance before Condition bonuses."},
   M17: {name:"Double Bash", type:"BASH", count:1, icon:"zap", text:"After you bash one opponent, double their knockback distance before Condition bonuses."},
   M18: {name:"Rain Delay", type:"INSTANT", count:1, icon:"drop", text:"Exchange everyone’s unplayed hand. Reset Speed and Midway draw/discard decks; keep held events."},
-  M19: {name:"Sauron Bash", type:"INSTANT", count:1, icon:"eye", text:"Your Speed movement must land a direct bash. Otherwise stay put and spend the card until you comply."},
+  M19: {name:"Sauron Bash", type:"INSTANT", count:1, icon:"eye", text:"Cursed for one round per driver in the race: your Speed move only counts if it lands a direct bash. Otherwise stay put and spend the card. Landing a bash breaks the curse early."},
   M20: {name:"Welcome to Oz", type:"INSTANT", count:1, icon:"swirl", text:"Reverse the rink’s driving direction. Leave every car on its current space."},
 } as const;
 export type EventId = keyof typeof EVENTS;

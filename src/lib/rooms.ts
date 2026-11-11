@@ -8,7 +8,7 @@ import type {Policy} from "./game/catalog";
 export type Seat={skin?:string;mascot?:string|null;id:string;name:string;bot:boolean;ready:boolean};
 export type RoomState={map:MapId;pace:"quick"|"relaxed";seats:Seat[];banned:string[];game:Game|null};
 export type RoomRow={id:string;code:string;host_id:string;player_ids:string[];status:"lobby"|"playing"|"finished"|"closed";revision:number;state:RoomState;created_at:Date;updated_at:Date};
-export type User={id:string;name:string;isTest?:boolean};
+export type User={id:string;name:string;isTest?:boolean;guest?:boolean};
 const rng=()=>randomInt(0,0x100000000)/0x100000000;
 export class HttpError extends Error{constructor(public status:number,message:string){super(message);}}
 export const cleanName=(name:string)=>name.replace(/[\u0000-\u001f<>]/g,"").trim().slice(0,24)||"Driver";
