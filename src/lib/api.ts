@@ -1,10 +1,24 @@
+import {cookies} from "next/headers";
+import {redirect} from "next/navigation";
 import {auth} from "./auth/server";
 import {HttpError,type User} from "./rooms";
 import {readGuest} from "./guest";
-/** The signed-in account, or the guest driver from this browser's guest cookie. */
-export async function currentUser():Promise<User|null>{
+
+// Neon Auth renews a signed-in session by setting cookies, which Next.js forbids
+// while a page is rendering. When that happens on a page, hop through
+// /api/session (a route handler, where cookies can be set) and come straight back.
+const COOKIE_WRITE=/Cookies can only be modified/i;
+export const REFRESHED_COOKIE="bcb_session_refreshed";
+
+/** The signed-in account, or the guest driver from this browser's guest cookie. Pass `page` from server pages. */
+export async function currentUser(page?:string):Promise<User|null>{
   let data:Awaited<ReturnType<typeof auth.getSession>>["data"]=null;
-  try{({data}=await auth.getSession());}catch(e){console.error("Account session check failed; continuing as guest",(e as Error)?.message);}
+  try{({data}=await auth.getSession());}
+  catch(e){
+    const message=(e as Error)?.message||"";
+    if(page&&COOKIE_WRITE.test(message)&&!(await cookies()).has(REFRESHED_COOKIE))redirect("/api/session?next="+encodeURIComponent(page));
+    console.error("Account session check failed; continuing as guest",message);
+  }
   if(data?.user)return {id:data.user.id,name:data.user.name||"Driver",isTest:!!data.user.email?.endsWith("@example.invalid")};
   return readGuest();
 }
