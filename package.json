@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@neon/auth": "0.8.2",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "latest",
     "lucide-react": "latest",
     "next": "16.4.6",
