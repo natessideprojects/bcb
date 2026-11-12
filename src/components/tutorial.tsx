@@ -65,6 +65,7 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
   {events:[
     {type:"reveal",actor:BIS,value:9},{type:"reveal",actor:TAF,value:2},{type:"reveal",actor:ME,value:1,extra:2,boost:"M05"},
     {type:"travel",actor:BIS,path:[...path(8,9,10,11,12,13,14,15,16),p(1,2)]},
+    {type:"lap",actor:BIS,delta:1,total:2},
     {type:"travel",actor:TAF,path:path(7,8,9)},
     {type:"bash",actor:TAF,victim:ME,pos:9,lane:"main",by:TAF},
     {type:"roll",purpose:"knockback",rolls:[{actor:ME,value:2}]},
@@ -76,7 +77,6 @@ const ROUNDS:{events:ReplayEvent[];after:RoundState}[]=[
     {type:"travel",actor:"rusty",path:rp(10,11,12,13,14,15,16,1,2)},
     {type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:3}]},
     {type:"travel",actor:"rusty",path:rp(2,1,16,15)},
-    {type:"lap",actor:BIS,delta:1,total:2},
     {type:"condition",condition:"rampage"},
   ],after:{players:{[ME]:{...p(10),tickets:5,hand:[7,9,6]},[BIS]:{...p(1,2),tickets:2,hand:[]},[TAF]:{...p(9),tickets:4,hand:[]}},rusty:15,condition:"rampage",milestone:2,reveal:[{id:BIS,primary:9},{id:TAF,primary:2},{id:ME,primary:1,extra:2,boost:"M05"}]}},
 ];
@@ -114,14 +114,14 @@ const NARRATION:Record<number,Record<number,Bubble>>={
   2:{
     2:{anchor:"center",text:"Biscuit flipped a 9, so Biscuit is Flag 1 and goes first. Your boosted 1 is Flag 3: flags follow the printed card, not the boost."},
     3:{anchor:BIS,title:"New lap!",text:"Biscuit crosses the checkered Start Line and starts a new lap."},
-    5:{anchor:ME,title:"BASH!",text:"Taffy lands on you!"},
-    6:{anchor:"dock",title:"Your knockback roll",text:"You were bashed, so you roll for knockback. Click your die (or press Next)."},
-    7:{anchor:ME,text:"You rolled a 2, and you hand Taffy one of your tickets."},
-    8:{anchor:ME,title:"Knocked back",text:"Here’s your knockback: your car rolls back 2 sections, from 9 to 7. Getting bashed doesn’t cost you your turn, though…"},
-    9:{anchor:ME,title:"Now your move",text:"…you still take your own move from where you landed. Your boosted 1 + 2 = 3 sections, from 7 to 10… right onto Rusty!"},
-    11:{anchor:ME,title:"Rusty bounty",text:"Bashing Rusty pays you 2 tickets from the bank…"},
-    12:{anchor:"rusty",text:"…and the hit sends Rusty careening half a lap across the rink."},
-    15:{anchor:BIS,text:"Every completed lap pays a ticket at the end of the round. Biscuit gets one."},
+    4:{anchor:BIS,title:"Lap ticket",text:"Every lap pays a ticket the moment you cross the line. Biscuit gets one right away. Crossing it backwards costs a ticket just as fast."},
+    6:{anchor:ME,title:"BASH!",text:"Taffy lands on you!"},
+    7:{anchor:"dock",title:"Your knockback roll",text:"You were bashed, so you roll for knockback. Click your die (or press Next)."},
+    8:{anchor:ME,text:"You rolled a 2, and you hand Taffy one of your tickets."},
+    9:{anchor:ME,title:"Knocked back",text:"Here’s your knockback: your car rolls back 2 sections, from 9 to 7. Getting bashed doesn’t cost you your turn, though…"},
+    10:{anchor:ME,title:"Now your move",text:"…you still take your own move from where you landed. Your boosted 1 + 2 = 3 sections, from 7 to 10… right onto Rusty!"},
+    12:{anchor:ME,title:"Rusty bounty",text:"Bashing Rusty pays you 2 tickets from the bank…"},
+    13:{anchor:"rusty",text:"…and the hit sends Rusty careening half a lap across the rink."},
     16:{anchor:"center",title:"New Rink Condition",text:"The first driver onto a new lap flips the Rink Sign. Rusty’s Rampage: Rusty moves twice every round until the next flip!"},
   },
 };

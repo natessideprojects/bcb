@@ -8,7 +8,7 @@ import {replayBudget} from "@/lib/game/engine";
 import type {PublicGame, ReplayEvent, RollPurpose, RoundReplay, Visual, Pose} from "@/lib/game/engine";
 import {CONDITIONS, EVENTS, type Condition, type EventId} from "@/lib/game/catalog";
 import {fairSound, type Part, type SfxName, type VoClip} from "@/lib/fair-audio";
-import {lines, rotate} from "@/lib/announcer";
+import {lines} from "@/lib/announcer";
 import {DICE_HOLD, DICE_TUMBLE, GO_BEAT, KNOCK_PAUSE, ROLL_WAIT, eventDuration, knockDuration} from "@/lib/game/presentation";
 import {carRoute, miniRoute, rustyRoute, rustySlot, slotPoint, startPoint, travelPoint, type Pt} from "@/lib/game/rink";
 
@@ -18,7 +18,7 @@ export type Fx = {id: number; kind: FxKind; x: number; y: number; text?: string;
 export type Reveal = {actor: string; value: number; extra?: number; boost?: EventId; auto?: boolean};
 export type Banner =
   | {kind: "go"}
-  | {kind: "doubles"; actors: string[]; value: number}
+  | {kind: "doubles"; actors: string[]; value: number; last?: boolean}
   | {kind: "card"; actor: string; event: EventId}
   | {kind: "condition"; condition: Condition}
   | {kind: "hazard"; actor: string; hazard: "grease" | "tilt" | "dead"; roll?: number; result: string}
@@ -89,7 +89,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
     const mine = ++token.current;
     held.current = false;
     if (!hooksRef.current?.noCutoff) armCutoff(replayBudget(replay, latest.current?.players.filter(p => !p.bot).map(p => p.id)), mine);
-    fairSound.cancel();
+    fairSound.settle(); // let the announcer finish the sentence from the last round
     const alive = () => token.current === mine;
     // Ending the show retires this run's token, so effect timers that fire later
     // (ticket floaters, sparkles) can never switch replay mode back on and lock the hand.
@@ -111,7 +111,9 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
       return alive();
     };
     const sfx = (name: SfxName, opts?: {volume?: number; rate?: number; delay?: number}) => fairSound.effect(name, opts);
-    const say = (line: Part | Part[], priority = 1) => fairSound.say(line, priority);
+    const say = (line: Part | Part[], priority = 1, optional = false) => fairSound.say(line, priority, {optional});
+    // Time a line can take (ms) during a beat that lasts `beat`, leaving room for "Driver two!" when it's named.
+    const room = (beat: number, named = true) => beat + 250 - (named ? 1100 : 0);
     // "Driver two!" ahead of the line, so everyone hears who it's happening to. Drivers
     // are called by number, not colour: a car skin can change a car's colour.
     const named = (id: string | null, ...rest: Part[]): Part[] => (id && id !== "rusty" && g.players.some(p => p.id === id) ? [lines.who(seat(id)), ...rest] : rest);
@@ -171,10 +173,10 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           break;
         }
         case "doubles": {
-          state.banner = {kind: "doubles", actors: e.actors, value: e.value};
-          call([...e.actors.flatMap((id, i): CaptionPart[] => [i ? (i === e.actors.length - 1 ? " & " : ", ") : "", {who: id}]), ` both played ${e.value}: Doubles! Midway cards after the moves`], "good");
+          state.banner = {kind: "doubles", actors: e.actors, value: e.value, last: e.last};
+          call([...e.actors.flatMap((id, i): CaptionPart[] => [i ? (i === e.actors.length - 1 ? " & " : ", ") : "", {who: id}]), ` both played ${e.value}: Doubles! ${e.last ? "No Midway cards on the final round" : "Midway cards after the moves"}`], "good");
           paint();
-          fairSound.doubles(); say(lines.doubles(), 2);
+          fairSound.doubles(); say(lines.doubles(e.last), 2);
           if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
           return true;
@@ -192,13 +194,17 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
             let verb = "moves";
             if (lastKnock) verb = karma === e.actor ? "rides the Karma forward" : "is knocked back";
             else if (slid?.actor === e.actor) verb = slid.kind === "grease" ? "slides" : slid.result === "back" ? "spins back" : "is flung forward";
-            else if (!drove.has(e.actor)) { verb = knockedBack.has(e.actor) ? "still takes their own move: drives" : "drives"; drove.add(e.actor); say(named(e.actor), 1); }
+            else if (!drove.has(e.actor)) { verb = knockedBack.has(e.actor) ? "still takes their own move: drives" : "drives"; drove.add(e.actor); say(named(e.actor), 1, true); }
             call([{who: e.actor}, ` ${verb} ${secs(steps)}`]);
+          }
+          // A bashed car flies back (or forward, with Karma Bash): call it as it goes.
+          if (lastKnock && e.actor !== "rusty" && !e.teleport) {
+            const line = lines.knock(steps, karma === e.actor, room(knockDuration(steps) + KNOCK_PAUSE, false));
+            if (line) say(line, 1);
           }
           karma = null; slid = null; rustyKnocked = false;
           paint();
           if (!(await drive(e, knockedAway))) return false;
-          if (lastKnock && !knockedAway && e.path.length - 1 >= 5) say("bash_far", 1);
           if (lastKnock && e.actor !== "rusty") {
             // Hold on the knocked-back car before anything else moves.
             knockedBack.add(e.actor);
@@ -219,7 +225,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           else call([{who: e.actor}, " bashes ", {who: e.victim}, "!"], "bash");
           paint();
           if (!e.actor) { sfx("rusty-bash"); say("rusty_bash", 2); }
-          else { sfx("bash"); sfx("bonk", {delay: 60, volume: 0.6}); say(chain ? "bash_chain" : named(e.actor, lines.bash()), 2); }
+          else { sfx("bash"); sfx("bonk", {delay: 60, volume: 0.6}); say(chain ? "bash_chain" : named(e.actor, lines.bash(room(eventDuration(e)))), 2); }
           if (mineHit(e.victim)) sfx("aww", {delay: 250, volume: 0.8}); else sfx("roar", {delay: 120, volume: 0.55});
           lastBashVictim = e.victim;
           if (e.victim === "rusty") rustyKnocked = true;
@@ -232,8 +238,8 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           fx(e.kind, at);
           state.banner = {kind: "hazard", actor: e.actor, hazard: e.kind, roll: e.roll, result: e.result};
           slid = e;
-          if (e.kind === "grease") { call([{who: e.actor}, " hits the Grease and slides"]); sfx("grease"); say(named(e.actor, lines.grease()), 2); sfx("roar", {delay: 300, volume: 0.35}); }
-          if (e.kind === "tilt") { call([{who: e.actor}, " lands on the Tilt-A-Whirl: roll 1–2 to spin back, 3–4 to hold, 5–6 to fly forward"]); sfx("tilt"); say(named(e.actor, "hazard_tilt"), 2); }
+          if (e.kind === "grease") { call([{who: e.actor}, " hits the Grease and slides"]); sfx("grease"); say(named(e.actor, lines.grease(room(eventDuration(e)))), 2); sfx("roar", {delay: 300, volume: 0.35}); }
+          if (e.kind === "tilt") { call([{who: e.actor}, " lands on the Tilt-A-Whirl: roll 1–2 to spin back, 3–4 to hold, 5–6 to fly forward"]); sfx("tilt"); say(named(e.actor, lines.tilt(room(eventDuration(e)))), 2); }
           if (e.kind === "dead") { call([{who: e.actor}, e.result === "paid" ? " hits a Dead Zone: the power’s out!" : " hits a Dead Zone and sits out next round"], "bad"); sfx("dead"); say(named(e.actor, e.result === "paid" ? "hazard_dead_paid" : "hazard_dead_sitout"), 2); if (e.result === "skip") sfx("aww", {delay: 400, volume: 0.6}); }
           paint();
           if (!(await wait(eventDuration(e)))) return false;
@@ -263,7 +269,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           if (e.to) sfx("ticket", {delay: 260});
           if (e.to) call(e.paid === 0 ? [{who: e.from}, " is out of tickets, so the bank pays ", {who: e.to}, ` ${tix(due)}`] : e.bank ? [{who: e.from}, ` pays ${e.paid} and the bank adds ${e.bank} for `, {who: e.to}] : [{who: e.from}, " pays ", {who: e.to}, ` ${tix(e.paid)}`], "good");
           else call(e.paid ? [{who: e.from}, ` loses ${tix(e.paid)} to Rusty`] : [{who: e.from}, " has no tickets for Rusty to take"], "bad");
-          if (e.paid) say([lines.who(seat(e.from)), {clip: "pay_up", fallback: e.to ? "bash_ticket" : undefined}], 1);
+          if (e.paid) say([lines.who(seat(e.from)), lines.pay()], 1);
           else if (e.to) say("bash_ticket", 1);
           if (e.paid && mineHit(e.from)) sfx("aww", {delay: 200, volume: 0.6});
           paint();
@@ -278,7 +284,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           sfx("flip"); sfx(e.kind.toLowerCase() as SfxName, {delay: 160});
           if (e.kind === "M14" || e.kind === "M15" || e.kind === "M07") sfx("aww", {delay: 700, volume: 0.55});
           if (e.kind === "M13" || e.kind === "M02" || e.kind === "M16") sfx("cheer", {delay: 600, volume: 0.45});
-          say(named(e.actor, lines.midway(e.kind)), 2);
+          say(named(e.actor, lines.midway(e.kind, room(eventDuration(e)))), 2);
           paint();
           if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
@@ -302,7 +308,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           call([{who: e.actor}, e.delta > 0 ? ` completes ${e.delta === 1 ? "a lap" : `${e.delta} laps`}: +${tix(e.delta)}` : ` crosses the line backward: −${tix(-e.delta)}`], e.delta > 0 ? "good" : "bad");
           sfx("lap"); sfx(e.delta > 0 ? "ticket" : "ticket-lose", {delay: 300});
           sfx(e.delta > 0 ? "cheer" : "aww", {delay: 200, volume: 0.5});
-          say(named(e.actor, lines.lap(e.delta)), 2);
+          say(named(e.actor, lines.lap(e.delta, room(eventDuration(e)))), 2);
           paint();
           if (!(await wait(eventDuration(e)))) return false;
           state.banner = null; paint();
@@ -351,7 +357,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           } else if (e.purpose === "tilt") {
             const spin = e.move ?? 3;
             call([who, ` rolls ${v}: ${v < 3 ? `spun back ${secs(spin)}!` : v > 4 ? `flung forward ${secs(spin)}!` : "holding steady"}`]);
-            say(v < 3 ? "hazard_tilt_back" : v > 4 ? "hazard_tilt_forward" : "hazard_tilt_stay", 2);
+            say(lines.tiltResult(v), 2);
           } else if (e.purpose === "escape") {
             call([who, ` rolls ${v} to escape the stall: ${v >= 4 ? "back in action!" : "still stalled"}`], v >= 4 ? "good" : "bad");
             if (v >= 4) say(named(roller, "stall_free"), 2);
@@ -457,7 +463,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
 
       const stop = isRusty ? (sfx("rusty-move"), () => {}) : fairSound.loop("drive", 0.32);
       if (knockedAway) say("rusty_jump", 2); // "And Rusty's off to the far side!"
-      else if (isRusty) say(rustyMoves++ ? "rusty_again" : replay.round <= 1 ? "rusty_intro" : lines.rustyMove(steps), 2);
+      else if (isRusty) say(rustyMoves++ ? "rusty_again" : replay.round <= 1 ? "rusty_intro" : lines.rustyMove(steps, room(eventDuration(e), false)), 2);
       if (!isRusty && steps >= 4) sfx("squeak", {delay: duration * 0.45, volume: 0.6});
 
       let face: 1 | -1 = -1, prev = start, crossed = 0;

@@ -312,3 +312,20 @@ test("Tilt-A-Whirl: 1–2 spins back, 3–4 holds, 5–6 flings forward, 5 under
   const events=testMove(g,a.id,4,face(6));
   assert.equal(a.pos,13);assert.ok(events.some(e=>e.type==="roll"&&e.purpose==="tilt"&&e.move===5));
 });
+test("lap tickets are paid and charged the moment a car crosses the line",()=>{
+  // Driver A crosses forward then bashes B; B is knocked back over the line.
+  const g=fresh(2);g.condition="free";g.rusty=15;const [a,b]=g.players;a.pos=27;b.pos=2;
+  const events=testMove(g,a.id,3,()=>0.4); // die 3
+  const types=events.map(e=>e.type+(("actor" in e)&&e.actor?":"+(e.actor===a.id?"a":e.actor===b.id?"b":e.actor):""));
+  const lapA=types.indexOf("lap:a"),bash=types.indexOf("bash:a"),lapB=types.indexOf("lap:b"),knock=events.findIndex(e=>e.type==="travel"&&e.actor===b.id&&e.knock);
+  assert.ok(lapA>0&&lapA<bash,"A's lap ticket comes right after the crossing, before the bash");
+  assert.ok(knock>0&&lapB===knock+1,"B is charged right after being knocked back over the line");
+  assert.equal(a.lap,1);assert.equal(b.lap,-1);assert.equal(a.tickets,5);assert.equal(b.tickets,1);audit(g,"immediate laps");
+});
+test("a car that crosses the line but stops short of Rusty behind it isn't paid for a lap",()=>{
+  const g=fresh(2);g.condition="free";g.rusty=1;const [a,b]=g.players;a.pos=26;b.pos=10;
+  g.replay={sequence:0,round:g.round,initial:{} as never,events:[]};
+  scenario(g,"M03",a.id,()=>0); // everyone drives forward 3: A would end on Rusty at 1
+  assert.equal(a.pos,28);assert.equal(a.lap,0);assert.equal(a.tickets,3);
+  assert.ok(!g.replay!.events.some(e=>e.type==="lap"&&e.actor===a.id));
+});

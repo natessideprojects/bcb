@@ -33,11 +33,13 @@ const durations = new Map<string, number>(); // ms, for clips that loaded
 const live = new Set<AudioScheduledSourceNode>();
 const lastVariant = new Map<string, number>();
 type Spoken = {clip: Clip; fallback?: Clip};
-type Voice = {src: AudioBufferSourceNode | null; priority: number; part: Spoken; rest: Spoken[]};
+type Voice = {src: AudioBufferSourceNode | null; priority: number; part: Spoken; rest: Spoken[]; ends?: number};
 type Queued = {parts: Spoken[]; priority: number; at: number};
 let generation = 0;
 let voice: Voice | null = null, queue: Queued[] = [];
-const QUEUE_LIFE = 2600;
+/** How long a waiting line stays worth saying (ms); important lines wait a little longer. */
+const QUEUE_LIFE = 2600, QUEUE_LIFE_IMPORTANT = 3600;
+const isName = (part: Spoken) => part.clip.startsWith("who_");
 
 function context() {
   if (typeof window === "undefined") return null;
@@ -122,8 +124,9 @@ function startVoice(parts: Spoken[], priority: number) {
     if (!buffer && part.fallback) buffer = await load(voUrl(part.fallback));
     if (voice !== v) return;
     if (!buffer || !voBus || !audible(settings.voice)) { endVoice(v); return; }
-    const {src} = play(buffer, voBus, {rate: settings.animation === "fast" ? 2 : 1});
-    v.src = src;
+    const rate = settings.animation === "fast" ? 2 : 1;
+    const {src} = play(buffer, voBus, {rate});
+    v.src = src; v.ends = (ctx?.currentTime ?? 0) + buffer.duration / rate;
     src.addEventListener("ended", () => endVoice(v));
   });
 }
@@ -136,7 +139,7 @@ function endVoice(v: Voice) {
 function nextLine() {
   while (queue.length) {
     const next = queue.shift()!;
-    if (performance.now() - next.at < QUEUE_LIFE) { startVoice(next.parts, next.priority); return; }
+    if (performance.now() - next.at < (next.priority >= 2 ? QUEUE_LIFE_IMPORTANT : QUEUE_LIFE)) { startVoice(next.parts, next.priority); return; }
   }
 }
 const spoken = (part: Part): Spoken => (typeof part === "string" ? {clip: part} : part);
@@ -219,25 +222,38 @@ export const fairSound = {
     };
   },
   /**
-   * The announcer. Priority 3 cuts in over anything; otherwise a busy announcer
-   * keeps talking and the newest important line waits briefly in the queue.
+   * The announcer. Priority 3 (GO!, the finish, a new Rink Condition) cuts in over
+   * anything. A more important line never cuts a word off: the current clip finishes,
+   * then the new line goes straight to the front. Lines of equal or lower importance
+   * wait in a short queue. Optional chatter is only said when the announcer is free.
    */
-  say(line: Part | Part[], priority = 1) {
+  say(line: Part | Part[], priority = 1, opts: {optional?: boolean} = {}) {
     if (!audible(settings.voice) || !context()) return;
     const parts = (Array.isArray(line) ? line : [line]).map(spoken);
     if (!parts.length) return;
-    if (!voice || priority > voice.priority || (priority === 3 && voice.priority === 3)) {
+    if (opts.optional && (voice || queue.length)) return;
+    // Even a priority-3 line lets a clip that's nearly done (under 0.35 s left) finish its word.
+    const nearlyDone = !!voice?.ends && !!ctx && voice.ends - ctx.currentTime < 0.35;
+    if (!voice || (priority === 3 && !nearlyDone)) {
       if (voice) { const old = voice.src; voice = null; try { old?.stop(); } catch {} }
       startVoice(parts, priority);
-    } else {
-      // Keep at most two lines waiting; a newer line pushes out an older, less important one.
-      queue.push({parts, priority, at: performance.now()});
-      if (queue.length > 2) {
-        const weakest = queue.reduce((w, q, i) => (q.priority < queue[w].priority ? i : w), 0);
-        queue.splice(weakest, 1);
-      }
+      return;
+    }
+    if (priority > voice.priority || priority === 3) {
+      // A driver's name keeps the rest of its line ("Driver three!" + "Pay up!"); anything else stops at the end of this clip.
+      if (!isName(voice.part) || priority === 3) voice.rest = [];
+      // "Driver two!" is already being said: don't say it twice.
+      if (!voice.rest.length && parts.length > 1 && parts[0].clip === voice.part.clip) parts.shift();
+      queue.unshift({parts, priority, at: performance.now()});
+    } else queue.push({parts, priority, at: performance.now()});
+    // Keep at most two lines waiting; a newer line pushes out an older, less important one.
+    if (queue.length > 2) {
+      const weakest = queue.reduce((w, q, i) => (q.priority < queue[w].priority ? i : w), 0);
+      queue.splice(weakest, 1);
     }
   },
+  /** A new round is starting: drop waiting lines, but let the current one finish its sentence. */
+  settle() { generation++; queue = []; },
   /** How long a clip runs (ms), so the show can give the announcer room. */
   length(clip: Clip) { return Math.round(((VO as Record<string, number>)[clip] ?? durations.get(voUrl(clip)) ?? 0) / (settings.animation === "fast" ? 2 : 1)); },
   talking: () => !!voice,

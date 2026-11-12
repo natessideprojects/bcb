@@ -1,0 +1,38 @@
+#,clip file (public/audio/vo/),plays when,line
+1,knock_back_1.mp3,A bashed car is knocked back,Knocked back!
+2,knock_back_2.mp3,"Knocked back, or a Tilt-A-Whirl spin back",Back you go!
+3,knock_back_3.mp3,"Knocked back, or a Tilt-A-Whirl spin back",[laughs] Reverse! Reverse!
+4,knock_back_5.mp3,"Knocked back, or a Tilt-A-Whirl spin back","Wrong way, buddy!"
+5,knock_far_1.mp3,Knocked back 5 or more sections,[laughs] All the way back!
+6,knock_far_2.mp3,Knocked back 5 or more sections,That's a long way back!
+7,push_forward_1.mp3,"Karma Bash forward, or Tilt-A-Whirl fling forward",Bounced forward!
+8,push_forward_2.mp3,"Karma Bash forward, or Tilt-A-Whirl fling forward",Shoved ahead!
+9,push_forward_3.mp3,"Karma Bash forward, or Tilt-A-Whirl fling forward",[excited] Free ride!
+10,karma_forward.mp3,Karma Bash sends the bashed car forward,Karma! That bash helped!
+11,rusty_low_2.mp3,Rusty rolls 1-2,Rusty's sputtering!
+12,rusty_low_3.mp3,Rusty rolls 1-2,[laughs] Rusty's out of gas!
+13,rusty_low_5.mp3,Rusty rolls 1-2,Rusty creeps along.
+14,rusty_move_3.mp3,Rusty rolls 3-4,Beep beep! Rusty's reversing!
+15,rusty_move_4.mp3,Rusty rolls 3-4,Rusty's rolling!
+16,rusty_high_2.mp3,Rusty rolls 5-6,Rusty floors it!
+17,doubles_3.mp3,Doubles (cards come after the moves),[excited] Doubles! Midway cards after the ride!
+18,doubles_4.mp3,Doubles (cards come after the moves),Doubles! Cards at the end of the round!
+19,doubles_last.mp3,Doubles on the final round (no cards),Doubles! But no cards on the last ride.
+20,bash_5.mp3,"After ""Driver N!"" on a bash",[shouting] BOOM!
+21,bash_6.mp3,"After ""Driver N!"" on a bash",Crunch!
+22,bash_8.mp3,"After ""Driver N!"" on a bash",Right in the bumper!
+23,pay_up_2.mp3,"After ""Driver N!"" when the bashed car pays",Hand it over!
+24,pay_up_3.mp3,"After ""Driver N!"" when the bashed car pays","Ticket, please!"
+25,lap_complete_2.mp3,"After ""Driver N!"" on a forward lap",Around she goes! One ticket!
+26,lap_backward_2.mp3,"After ""Driver N!"" crossing the line backwards",Wrong way! Lose a ticket.
+27,hazard_tilt_2.mp3,"After ""Driver N!"" landing on the Tilt-A-Whirl (short take)",Tilt-A-Whirl! Roll the die!
+28,hazard_grease_3.mp3,"After ""Driver N!"" hitting Grease (short take)",Slippery!
+29,round_pick_3.mp3,"End of a round, time to pick",Next round. Pick a card!
+30,round_pick_4.mp3,"End of a round, time to pick",Who's feeling lucky?
+31,midway_m19_fools.mp3,Sauron Bash card (alternate),"[dramatic] Sauron Bash! Fly, you fools!"
+32,midway_m09_phil.mp3,Groundhog Day card (alternate),"Groundhog Day! Thanks, Punxsutawney Phil!"
+33,midway_m10_rock.mp3,It's One Louder card (alternate),[shouting] It's one louder! Rock and roll!
+34,midway_m07_loser.mp3,Safety Violation card (alternate),Safety Violation! What a loser!
+35,midway_m01_raygun.mp3,Honey I Shrunk the Car card (alternate),Zapped by a raygun! To the mini-track!
+36,midway_m06_quagmire.mp3,Crazy Wheels card (alternate),Crazy Wheels! What a quagmire!
+37,midway_m08_blinded.mp3,Disco Bash card (alternate),Disco Bash! Blinded by the disco ball!

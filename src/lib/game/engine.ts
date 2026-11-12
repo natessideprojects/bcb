@@ -6,7 +6,7 @@ export type Midway={id:string;kind:EventId;available:number};
 export type Pick={primary:string;extra?:string;boost?:string};
 export type Pose={pos:number;lap:number;lane:"main"|"mini"};
 export type Visual={players:Record<string,Pose>;rusty:number;direction:1|-1;condition:Condition;milestone:number;tickets?:Record<string,number>};
-export type ReplayEvent={type:"travel";actor:string;path:Pose[];teleport?:boolean;knock?:boolean}|{type:"bash";actor:string|null;victim:string;pos:number;lane:"main"|"mini";by?:string|null}|{type:"reveal";actor:string;value:number;extra?:number;boost?:EventId;auto?:boolean}|{type:"doubles";actors:string[];value:number}|{type:"card";actor:string;kind:EventId}|{type:"draw";actor:string;count:number;reason:string}|{type:"hazard";actor:string;kind:"grease"|"tilt"|"dead";pos:number;lane:"main"|"mini";roll?:number;result:"slide"|"forward"|"back"|"stay"|"paid"|"skip"}|{type:"lap";actor:string;delta:number;total?:number}|{type:"tickets";actor:string;delta:number;reason:"bash"|"bounty"|"dead"|"card"|"prize";total?:number}|{type:"pay";from:string;to:string|null;paid:number;bank:number;totals:Record<string,number>}|{type:"roll";purpose:RollPurpose;rolls:{actor:string;value:number}[];multiplier?:number;bonus?:number;card?:number;move?:number}|{type:"condition";condition:Condition}|{type:"stall";actor:string;pos:number;pileup:boolean};
+export type ReplayEvent={type:"travel";actor:string;path:Pose[];teleport?:boolean;knock?:boolean}|{type:"bash";actor:string|null;victim:string;pos:number;lane:"main"|"mini";by?:string|null}|{type:"reveal";actor:string;value:number;extra?:number;boost?:EventId;auto?:boolean}|{type:"doubles";actors:string[];value:number;last?:boolean}|{type:"card";actor:string;kind:EventId}|{type:"draw";actor:string;count:number;reason:string}|{type:"hazard";actor:string;kind:"grease"|"tilt"|"dead";pos:number;lane:"main"|"mini";roll?:number;result:"slide"|"forward"|"back"|"stay"|"paid"|"skip"}|{type:"lap";actor:string;delta:number;total?:number}|{type:"tickets";actor:string;delta:number;reason:"bash"|"bounty"|"dead"|"card"|"prize";total?:number}|{type:"pay";from:string;to:string|null;paid:number;bank:number;totals:Record<string,number>}|{type:"roll";purpose:RollPurpose;rolls:{actor:string;value:number}[];multiplier?:number;bonus?:number;card?:number;move?:number}|{type:"condition";condition:Condition}|{type:"stall";actor:string;pos:number;pileup:boolean};
 /** Why a die was rolled. The roller is a driver id, or "rusty" for the house car. */
 export type RollPurpose="knockback"|"tilt"|"escape"|"rusty"|"tie";
 export type RoundReplay={sequence?:number;round:number;initial:Visual;events:ReplayEvent[]};
@@ -19,7 +19,7 @@ const pose=(p:Pose):Pose=>({pos:p.pos,lap:p.lap,lane:p.lane});
 const visual=(g:Game):Visual=>({players:Object.fromEntries(g.players.map(p=>[p.id,pose(p)])),rusty:g.rusty,direction:g.direction,condition:g.condition,milestone:g.milestone,tickets:Object.fromEntries(g.players.map(p=>[p.id,p.tickets]))});
 export type Player={skin?:string;mascot?:string|null;lastMidway?:Midway[];id:string;name:string;seat:number;color:string;bot:boolean;pos:number;lap:number;lane:"main"|"mini";tickets:number;hand:Speed[];held:Midway[];skip:boolean;stalled:boolean;shrink:number;compelled:boolean;curse?:number;active:boolean;policy:Policy;misses:number;stats?:{bashes:number;doubles:number;laps:number}};
 export type Log={id:number;round:number;text:string;kind:"move"|"bash"|"event"|"round"|"condition"};
-export type Game={rules:"3.3"|"3.4";trackLength?:16|18|28;replay?:RoundReplay;phase:"pick"|"midway"|"finished";manualMidway?:boolean;presentationSeq?:number;midway?:{starter?:boolean;queue:{actor:string;card:Midway}[];revealed:boolean;delta:Record<string,number>;played:Speed[];boosts:Midway[]};map:MapId;pace:"relaxed"|"quick";direction:1|-1;firstSeat:number;nextFirstSeat:number|null;round:number;limit:number;players:Player[];rusty:number;condition:Condition;conditionDeck:Condition[];conditionDiscard:Condition[];milestone:number;highLap:number;speedDeck:Speed[];speedDiscard:Speed[];eventDeck:Midway[];eventDiscard:Midway[];picks:Record<string,Pick>;flags:string[];log:Log[];logSeq:number;deadline:number;final:boolean;lastReveal:{id:string;primary:number;extra?:number;boost?:EventId}[];winners:string[];cards?:CardNote[]};
+export type Game={rules:"3.3"|"3.4";trackLength?:16|18|28;replay?:RoundReplay;phase:"pick"|"midway"|"finished";manualMidway?:boolean;presentationSeq?:number;midway?:{starter?:boolean;queue:{actor:string;card:Midway}[];revealed:boolean;delta?:Record<string,number>;played:Speed[];boosts:Midway[]};map:MapId;pace:"relaxed"|"quick";direction:1|-1;firstSeat:number;nextFirstSeat:number|null;round:number;limit:number;players:Player[];rusty:number;condition:Condition;conditionDeck:Condition[];conditionDiscard:Condition[];milestone:number;highLap:number;speedDeck:Speed[];speedDiscard:Speed[];eventDeck:Midway[];eventDiscard:Midway[];picks:Record<string,Pick>;flags:string[];log:Log[];logSeq:number;deadline:number;final:boolean;lastReveal:{id:string;primary:number;extra?:number;boost?:EventId}[];winners:string[];cards?:CardNote[]};
 /** Midway cards that acted on the race (INSTANT draws and used BOOST/DEFENSE/BASH cards), newest last. Public. */
 export type CardNote={round:number;actor:string;kind:EventId;how:"drew"|"used"};
 export type Rng=()=>number;
@@ -52,12 +52,19 @@ class Referee {
   chain(owner:string|null,action:(c:Chain)=>void){const c:Chain={owner,hit:new Set(),hazards:new Set(),defenses:new Set(),grow:new Set(),steps:0};action(c);for(const p of this.seatOrder()){if(c.grow.has(p.id)&&p.lane==="mini"){const prior=pose(p);p.lane="main";p.shrink=0;this.movement(p.id,prior,pose(p),true);if(p.pos&&this.occupied(p,p.pos))this.safe(p,p.pos,-this.g.direction,false);this.note(`${p.name} grows back to full size.`);}}}
   // Rusty drives the main track only: the mini-track is out of his reach.
   occupied(p:Player,n:number){return n!==0&&((p.lane==="main"&&n===this.g.rusty)||this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===n));}
-  safe(p:Player,n:number,direction:number,before=true){let at=before?this.wrap(n-direction):n;for(let i=0;i<this.size+1;i++){if(!this.occupied(p,at)){const beforePose=pose(p);p.pos=at;this.movement(p.id,beforePose,pose(p),true);return;}at=this.wrap(at-direction);}throw new GameError("No safe space available.");}
+  // Backing off to a free space mid-move can take a car back over the Start Line; `count` makes that crossing count.
+  safe(p:Player,n:number,direction:number,before=true,count=false){let at=n,crossed=0;const back=(x:number)=>{crossed+=this.crossing(x,-direction);return this.wrap(x-direction);};if(before)at=back(at);for(let i=0;i<this.size+1;i++){if(!this.occupied(p,at)){const beforePose=pose(p);p.pos=at;if(count)this.cross(p,crossed);this.movement(p.id,beforePose,pose(p),true);return;}at=back(at);}throw new GameError("No safe space available.");}
   markGrow(p:Player,c:Chain){if(p.lane==="mini")c.grow.add(p.id);}
-  step(p:Player,d:number,c:Chain){const beforePose=pose(p),old=p.pos,forward=d*this.g.direction>0;let crossing=0;if(old===0){p.pos=d>0?1:this.size;if(!forward)crossing=-1;}else{p.pos=this.wrap(old+d);if(old===this.size&&d>0)crossing=this.g.direction;if(old===1&&d<0)crossing=-this.g.direction;}p.lap+=crossing;this.delta[p.id]=(this.delta[p.id]||0)+crossing;this.g.highLap=Math.max(this.g.highLap,p.lap);if(p.lane==="mini"){p.shrink=Math.max(0,p.shrink+d*this.g.direction);if(p.shrink>=this.size)this.markGrow(p,c);}if(crossing>0)this.stat(p,"laps",crossing);this.movement(p.id,beforePose,pose(p));}
+  /** +1 for crossing the Start Line in the driving direction, −1 for crossing it backwards. */
+  crossing(old:number,d:number){if(old===this.size&&d>0)return this.g.direction;if(old===1&&d<0)return -this.g.direction;return 0;}
+  cross(p:Player,n:number){if(!n)return;p.lap+=n;this.laps[p.id]=(this.laps[p.id]||0)+n;this.g.highLap=Math.max(this.g.highLap,p.lap);if(n>0)this.stat(p,"laps",n);}
+  /** Lap tickets are paid (or charged) as soon as the move that crossed the line ends. */
+  settleLap(p:Player){const n=this.laps[p.id]||0;if(!n)return;this.laps[p.id]=0;const before=p.tickets;p.tickets=Math.max(0,p.tickets+n);this.emit({type:"lap",actor:p.id,delta:n,total:p.tickets});this.note(`${p.name}: ${n>0?"+":""}${n} lap ticket${Math.abs(n)===1?"":"s"}${n<0&&before<-n?" (out of tickets to pay)":""}.`);}
+  step(p:Player,d:number,c:Chain){const beforePose=pose(p),old=p.pos,forward=d*this.g.direction>0;let crossing=0;if(old===0){p.pos=d>0?1:this.size;if(!forward)crossing=-1;}else{p.pos=this.wrap(old+d);crossing=this.crossing(old,d);}this.cross(p,crossing);if(p.lane==="mini"){p.shrink=Math.max(0,p.shrink+d*this.g.direction);if(p.shrink>=this.size)this.markGrow(p,c);}this.movement(p.id,beforePose,pose(p));}
   directBashPossible(p:Player,distance:number){const d=this.g.direction;let at=p.pos;let usedDaddy=false;for(let i=0;i<distance;i++){at=at===0?(d>0?1:this.size):this.wrap(at+d);const stalled=this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===at&&o.stalled);if(stalled){if(usedDaddy||p.policy.daddy!=="intercept"||!this.usable(p,"M12"))return false;usedDaddy=true;}}return (p.lane==="main"&&at===this.g.rusty)||this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===at&&!o.stalled);}
   speed(p:Player,distance:number){if(p.compelled&&!this.directBashPossible(p,distance)){this.note(`${p.name} is watched by Sauron: no direct bash, so the card is spent without moving.`);return;}this.note(`${p.name} moves ${distance}.`,"move");this.chain(p.id,c=>this.travel(p,distance,"speed",c));}
-  delta:Record<string,number>={};
+  /** Start Line crossings not yet paid out, per driver. */
+  laps:Record<string,number>={};
   ties:{actor:string;value:number}[][]=[];
   travel(p:Player,distance:number,source:"speed"|"forced"|"lead",c:Chain){
     if(++c.steps>256)throw new GameError("Movement chain exceeded its safety limit.");
@@ -67,19 +74,24 @@ class Referee {
       const block=this.g.players.some(o=>o.id!==p.id&&o.pos===p.pos&&o.lane===p.lane&&o.stalled);
       if(block&&(source!=="lead"||remaining===0)){
         if(!c.defenses.has(p.id)&&p.policy.daddy==="intercept"&&this.use(p,"M12")){c.defenses.add(p.id);if(!remaining)remaining=1;}
-        else{p.stalled=true;this.emit({type:"stall",actor:p.id,pos:p.pos,pileup:true});this.note(`${p.name} joins a pile-up on ${p.pos}.`);return;}
+        else{this.settleLap(p);p.stalled=true;this.emit({type:"stall",actor:p.id,pos:p.pos,pileup:true});this.note(`${p.name} joins a pile-up on ${p.pos}.`);return;}
       }
     }
-    const end=p.pos,lane=p.lane;
+    const end=p.pos,lane=p.lane,onRusty=lane==="main"&&end===this.g.rusty;
+    // Stopping short happens before the lap is paid, so a car that ends up back behind the line isn't paid for it.
+    const ahead=onRusty?[]:this.g.players.filter(o=>o.id!==p.id&&o.pos===end&&o.lane===lane);
+    if(onRusty&&source!=="speed"){this.safe(p,end,direction,true,true);this.settleLap(p);this.note(`${p.name} stops safely before Rusty.`);return;}
+    if(ahead[0]&&!ahead.some(v=>v.stalled)&&c.hit.has(ahead[0].id)){this.safe(p,end,direction,true,true);this.settleLap(p);this.note(`${p.name} takes a safe space; that driver was already hit.`);return;}
+    this.settleLap(p);
     // Lanes never mix: mini-track cars only bash (and are bashed by) other mini-track cars.
-    if(lane==="main"&&end===this.g.rusty){if(source==="speed"){p.tickets+=2;p.compelled=false;this.markGrow(p,c);let steps=Math.floor(this.size/2);while(this.g.players.some(o=>o.lane==="main"&&o.pos===this.wrap(end+steps*this.g.direction)))steps++;const next=this.wrap(end+steps*this.g.direction);this.emit({type:"bash",actor:p.id,victim:"rusty",pos:end,lane:p.lane});this.emit({type:"tickets",actor:p.id,delta:2,reason:"bounty",total:p.tickets});this.stat(p,"bashes");
+    if(onRusty){if(source==="speed"){p.tickets+=2;p.compelled=false;this.markGrow(p,c);let steps=Math.floor(this.size/2);while(this.g.players.some(o=>o.lane==="main"&&o.pos===this.wrap(end+steps*this.g.direction)))steps++;const next=this.wrap(end+steps*this.g.direction);this.emit({type:"bash",actor:p.id,victim:"rusty",pos:end,lane:p.lane});this.emit({type:"tickets",actor:p.id,delta:2,reason:"bounty",total:p.tickets});this.stat(p,"bashes");
       // The bash knocks Rusty half a lap ahead: he drives there, he doesn't teleport.
-      this.emit({type:"travel",actor:"rusty",path:Array.from({length:steps+1},(_,i)=>({pos:this.wrap(end+i*this.g.direction),lap:0,lane:"main" as const}))});this.g.rusty=next;this.note(`${p.name} bashes Rusty for 2 tickets! Rusty jumps to ${next}.`,"bash");}else{this.safe(p,end,direction);this.note(`${p.name} stops safely before Rusty.`);return;}}
+      this.emit({type:"travel",actor:"rusty",path:Array.from({length:steps+1},(_,i)=>({pos:this.wrap(end+i*this.g.direction),lap:0,lane:"main" as const}))});this.g.rusty=next;this.note(`${p.name} bashes Rusty for 2 tickets! Rusty jumps to ${next}.`,"bash");}}
     else{
-      const victims=this.g.players.filter(o=>o.id!==p.id&&o.pos===end&&o.lane===lane);
+      const victims=ahead;
       if(victims.some(v=>v.stalled)){p.stalled=true;this.emit({type:"stall",actor:p.id,pos:end,pileup:true});this.note(`${p.name} joins a pile-up on ${end}.`);return;}
       const victim=victims[0];
-      if(victim){if(c.hit.has(victim.id)){this.safe(p,end,direction);this.note(`${p.name} takes a safe space; that driver was already hit.`);return;}this.bash(victim,p,c);}
+      if(victim)this.bash(victim,p,c);
     }
     if(p.pos===end&&p.lane===lane)this.hazard(p,c);
   }
@@ -195,7 +207,7 @@ class Referee {
   }
   sauronCountdown(){for(const p of this.g.players){if(!p.compelled){p.curse=undefined;continue;}p.curse=(p.curse??sauronRounds(this.g))-1;if(p.curse<=0){p.compelled=false;p.curse=undefined;this.note(`Sauron looks away. ${p.name} can drive freely again.`);}else this.note(`Sauron's curse on ${p.name}: ${p.curse} round${p.curse===1?"":"s"} left.`);}}
   resolve(now:number){
-    const g=this.g;this.delta={};g.replay={sequence:g.presentationSeq=(g.presentationSeq||0)+1,round:g.round,initial:visual(g),events:[]};const active=g.players.filter(p=>p.active);
+    const g=this.g;this.laps={};g.replay={sequence:g.presentationSeq=(g.presentationSeq||0)+1,round:g.round,initial:visual(g),events:[]};const active=g.players.filter(p=>p.active);
     const cards=new Map(active.map(p=>[p.id,p.hand.find(c=>c.id===g.picks[p.id].primary)!]));
     this.ties=[];const order=[10,9,8,7,6,5,4,3,2,1].flatMap(v=>this.orderTies(active.filter(p=>cards.get(p.id)?.value===v)));
     g.flags=order.map(p=>p.id);g.lastReveal=[];
@@ -203,18 +215,19 @@ class Referee {
     for(const p of order){const pick=g.picks[p.id];// misses>0 means the timer locked this card in (it resets whenever the driver picks).
     this.emit({type:"reveal",actor:p.id,value:cards.get(p.id)!.value,extra:p.hand.find(c=>c.id===pick.extra)?.value,boost:p.held.find(c=>c.id===pick.boost)?.kind,...(p.misses>0?{auto:true}:{})});}
     tieRolls(); // tied cards roll for the flag after everyone flips
-    for(const value of new Set(active.map(p=>cards.get(p.id)!.value))){const group=active.filter(p=>cards.get(p.id)!.value===value);if(group.length>1){this.emit({type:"doubles",actors:group.map(p=>p.id),value});for(const p of group)this.stat(p,"doubles");}}
-
-    const pending=new Map<string,Midway[]>();
-    for(const p of order){const value=cards.get(p.id)!.value;const duplicates=active.filter(o=>cards.get(o.id)?.value===value).length;if(duplicates>1){const count=g.condition==="fireworks"?2:1;const drawn:Midway[]=[];for(let i=0;i<count;i++){const e=this.drawEvent();if(e)drawn.push(e);}pending.set(p.id,drawn);this.note(`${p.name} draws ${drawn.length} Midway card${drawn.length===1?"":"s"} for Doubles.`);}}
     const moves=new Map<string,{primary:Speed;extra?:Speed;boost?:Midway}>();const played:Speed[]=[],boosts:Midway[]=[];
+    // Played cards leave the hand first: a driver playing their last card makes this the final round.
     for(const p of order){const pick=g.picks[p.id],primary=cards.get(p.id)!,extra=p.hand.find(c=>c.id===pick.extra),boost=p.held.find(c=>c.id===pick.boost);moves.set(p.id,{primary,extra,boost});p.hand=p.hand.filter(c=>c.id!==primary.id&&c.id!==extra?.id);if(boost){p.held=p.held.filter(c=>c.id!==boost.id);boosts.push(boost);}played.push(primary);if(extra)played.push(extra);if(!p.hand.length)g.final=true;g.lastReveal.push({id:p.id,primary:primary.value,extra:extra?.value,boost:boost?.kind});this.note(`${p.name} reveals ${primary.value}${boost?" + "+EVENTS[boost.kind].name:""}.`,"move");}
+    // Doubles win Midway cards, drawn after the moves. Not on the final round: they could never be played.
+    for(const value of new Set(active.map(p=>cards.get(p.id)!.value))){const group=active.filter(p=>cards.get(p.id)!.value===value);if(group.length>1){this.emit({type:"doubles",actors:group.map(p=>p.id),value,...(g.final?{last:true}:{})});for(const p of group)this.stat(p,"doubles");if(g.final)this.note(`Doubles on the final round: no Midway cards.`);}}
+    const pending=new Map<string,Midway[]>();
+    if(!g.final)for(const p of order){const value=cards.get(p.id)!.value;const duplicates=active.filter(o=>cards.get(o.id)?.value===value).length;if(duplicates>1){const count=g.condition==="fireworks"?2:1;const drawn:Midway[]=[];for(let i=0;i<count;i++){const e=this.drawEvent();if(e)drawn.push(e);}pending.set(p.id,drawn);this.note(`${p.name} draws ${drawn.length} Midway card${drawn.length===1?"":"s"} for Doubles.`);}}
     const mod=(v:number)=>Math.max(1,v+(g.condition==="surge"?1:g.condition==="brownout"?-1:0));
     for(const p of order){const m=moves.get(p.id)!;if(p.stalled){this.note(`${p.name}'s committed movement is canceled by the stall.`);continue;}const base=m.boost?.kind==="M10"?11:m.primary.value+(m.boost?.kind==="M05"?m.extra!.value:0);this.speed(p,mod(base));if(m.boost?.kind==="M09"&&!p.stalled)this.speed(p,mod(m.extra!.value));}
     this.sauronCountdown();
     for(let i=0;i<(g.condition==="rampage"?2:1);i++){const roll=this.die();this.emit({type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:roll}]});const path:Pose[]=[{pos:g.rusty,lap:0,lane:"main"}];for(let step=0;step<roll;step++)path.push({pos:this.wrap(g.rusty-(step+1)*g.direction),lap:0,lane:"main"});this.emit({type:"travel",actor:"rusty",path});g.rusty=path.at(-1)!.pos;this.note(`Rusty rolls ${roll} and reverses to ${g.rusty}.`,"move");const victims=g.players.filter(p=>p.lane==="main"&&p.pos===g.rusty).sort((a,b)=>a.seat-b.seat);this.chain(null,c=>{for(const p of victims)if(p.lane==="main"&&p.pos===g.rusty&&!c.hit.has(p.id))this.bash(p,null,c);});}
     if(g.manualMidway && pending.size){
-      g.midway={queue:this.ordered().flatMap(p=>(pending.get(p.id)||[]).map(card=>({actor:p.id,card}))),revealed:false,delta:{...this.delta},played,boosts};
+      g.midway={queue:this.ordered().flatMap(p=>(pending.get(p.id)||[]).map(card=>({actor:p.id,card}))),revealed:false,played,boosts};
       g.phase="midway";g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay,humansOf(g)):86400000);
       this.continueMidway(now);return;
     }
@@ -224,20 +237,20 @@ class Referee {
   continueMidway(now:number){
     const g=this.g, stage=g.midway;if(!stage)return;
     while(stage.queue.length && this.player(stage.queue[0].actor).bot){this.placeMidway(now);if(!g.midway)return;}
-    if(!stage.queue.length){g.midway=undefined;g.phase="pick";if(stage.starter){g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay,humansOf(g)):86400000);return;}this.delta=stage.delta;this.cleanup(stage.played,stage.boosts,now);}
+    if(!stage.queue.length){g.midway=undefined;g.phase="pick";if(stage.starter){g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay,humansOf(g)):86400000);return;}this.cleanup(stage.played,stage.boosts,now);}
   }
   placeMidway(now:number){
     const g=this.g,stage=g.midway;if(!stage?.queue.length)return;
-    const {actor,card}=stage.queue.shift()!,p=this.player(actor);this.delta={...stage.delta};
+    const {actor,card}=stage.queue.shift()!,p=this.player(actor);
     p.lastMidway=[card,...(p.lastMidway||[])].slice(0,8);
     if(EVENTS[card.kind].type==="INSTANT")this.instant(p,card);
     else{card.available=stage.starter?g.round:g.round+1;p.held.push(card);this.emit({type:"card",actor,kind:card.kind});this.note(`${p.name} puts ${EVENTS[card.kind].name} on their mat${stage.starter?" for the first move":" for next round"}.`);}
-    stage.delta={...this.delta};stage.revealed=false;
+    stage.revealed=false;
     g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay,humansOf(g)):86400000);
   }
   cleanup(played:Speed[],boosts:Midway[],now:number){
     const g=this.g;
-    for(const p of g.players){const delta=this.delta[p.id]||0;if(delta){p.tickets=Math.max(0,p.tickets+delta);this.emit({type:"lap",actor:p.id,delta,total:p.tickets});this.note(`${p.name}: ${delta>0?"+":""}${delta} lap ticket${Math.abs(delta)===1?"":"s"}.`);}}
+    for(const p of g.players)this.settleLap(p); // (laps are paid as cars cross; this only catches stragglers)
     g.speedDiscard.push(...played);g.eventDiscard.push(...boosts);
     if(g.final){g.phase="finished";const rank=[...g.players].sort((a,b)=>b.tickets-a.tickets||position(b,g.direction,this.size)-position(a,g.direction,this.size));g.winners=rank.filter(p=>p.tickets===rank[0].tickets&&position(p,g.direction,this.size)===position(rank[0],g.direction,this.size)).map(p=>p.id);this.note(`${g.winners.map(id=>this.player(id).name).join(" and ")} win${g.winners.length===1?"s":""} the Blue Ribbon!`,"round");g.picks={};return;}
     while(g.milestone<g.highLap){g.milestone++;this.condition();}
@@ -268,7 +281,7 @@ export function makeGame(seats:{id:string;name:string;bot:boolean}[],map:MapId,p
   for(const p of g.players)r.drawSpeed(p);r.condition();r.begin(now);
   if(options.starterMidway&&g.manualMidway){
     const queue=r.seatOrder().map(p=>{const i=g.eventDeck.findIndex(c=>EVENTS[c.kind].type!=="INSTANT");if(i<0)throw new GameError("Starter cards unavailable.");const [card]=g.eventDeck.splice(i,1);card.available=1;return {actor:p.id,card};});
-    g.midway={starter:true,queue,revealed:false,delta:{},played:[],boosts:[]};g.phase="midway";r.note("Every driver claims one starter Midway card, usable in round 1.");r.continueMidway(now);
+    g.midway={starter:true,queue,revealed:false,played:[],boosts:[]};g.phase="midway";r.note("Every driver claims one starter Midway card, usable in round 1.");r.continueMidway(now);
   }
   advanceGame(g,random,now);return g;
 }

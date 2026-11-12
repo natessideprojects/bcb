@@ -131,7 +131,7 @@ export function ReplayScene({show, game, hideCaption, onRoll, onPeek}: {show: Th
       {b?.kind === "doubles" && (
         <div className="doubles-celebration" role="status">
           <div className="confetti-field" aria-hidden="true">{Array.from({length: 40}, (_, i) => <i key={i} style={{left: `${(i * 137.5) % 100}%`, background: ["#ed493a", "#ffc95a", "#278ec6", "#92c571", "#c176ca"][i % 5], animationDelay: `${(i % 7) * 0.05}s`, transform: `rotate(${i * 31}deg)`}}/>)}</div>
-          <div className="doubles-ribbon"><small>MATCHING {b.value}s!</small><strong>DOUBLES!</strong><span>{b.actors.map(name).join(" & ")} draw Midway cards</span></div>
+          <div className="doubles-ribbon"><small>MATCHING {b.value}s!</small><strong>DOUBLES!</strong><span>{b.last ? "No Midway cards on the final round" : `${b.actors.map(name).join(" & ")} draw Midway cards after the moves`}</span></div>
         </div>
       )}
 
