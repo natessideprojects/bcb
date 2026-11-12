@@ -1,6 +1,6 @@
 export type EventKind = `M${string}`;
 export const EVENTS = {
-  M01: {name:"Honey I Shrunk the Car", type:"INSTANT", count:3, icon:"shrink", text:"Take the mini-track. Grow after a bash or one net forward lap."},
+  M01: {name:"Honey I Shrunk the Car", type:"INSTANT", count:3, icon:"shrink", text:"Take the mini-track: only other mini cars can bash you, and Rusty can’t reach you. Grow after a bash or one net forward lap."},
   M02: {name:"Lead Foot Bash", type:"INSTANT", count:2, icon:"zap", text:"Move one space past the leader and bash the drivers you pass. If you’re already leading, take a full lap and bash every opponent."},
   M03: {name:"Power Surge", type:"INSTANT", count:3, icon:"zap", text:"Every driver travels forward 3, in flag order. Every car bashed along the way pays you."},
   M04: {name:"Power Outage", type:"INSTANT", count:3, icon:"plug", text:"Every driver exchanges their highest unplayed Speed Card."},

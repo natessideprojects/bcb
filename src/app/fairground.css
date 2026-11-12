@@ -43,3 +43,11 @@ h1,h2{letter-spacing:0;line-height:1.2}h3,h4{font-family:var(--font-friendly),sa
 .open-countdown.waiting{background:#fff8e9;border-color:#ceb180;color:#6b553c}
 .open-countdown.waiting strong{font-size:14px;color:#24283f}
 @media (max-width:640px){.open-races .section-heading{flex-wrap:wrap;gap:10px}.open-race{flex-wrap:wrap}.open-race .race-title{flex-basis:calc(100% - 70px)}}
+/* Sound button: green when playing, amber and pulsing until the first tap starts it. */
+.sound-power{cursor:pointer}
+.sound-power.waiting{background:#8a5a1c;border-color:#ffd16c;animation:sound-wait 1.6s ease-in-out infinite}
+@keyframes sound-wait{0%,100%{box-shadow:0 0 0 0 #ffd16c00}50%{box-shadow:0 0 0 5px #ffd16c66}}
+/* The tutorial points at the sound controls while it explains them. */
+body.spot-sound .fair-sound-dock{z-index:120;outline:3px solid #ffd16c;outline-offset:4px;border-radius:12px;animation:sound-spot 1.1s ease-in-out infinite}
+@keyframes sound-spot{0%,100%{outline-color:#ffd16c}50%{outline-color:#ffd16c33}}
+@media(prefers-reduced-motion:reduce){.sound-power.waiting,body.spot-sound .fair-sound-dock{animation:none}}

@@ -126,9 +126,10 @@ const NARRATION:Record<number,Record<number,Bubble>>={
   },
 };
 
-type Step={say:Bubble;chosen?:number[];boost?:boolean}|{round:number};
+type Step={say:Bubble;chosen?:number[];boost?:boolean;spot?:"sound"}|{round:number};
 const SCRIPT:Step[]=[
   {say:{anchor:ME,title:"Welcome to the fair!",text:"Let’s watch a quick 3-round race. You’re Rookie, Driver 1: the car with the gold ring. Biscuit is Driver 2 and Taffy is Driver 3. Driver numbers are handed out when a race starts and never change, so watch the badges, the lineup and the announcer."}},
+  {say:{anchor:"center",title:"Sound",text:"The fair has music, crash sounds and an announcer who calls out every driver by number. It’s on unless you’ve muted it. The speaker button at the top right turns sound on or off, and the sliders button beside it sets the music, effects and announcer volumes."},spot:"sound"},
   {say:{anchor:"center",text:"The rink has 16 numbered sections. Your Speed Card is how many sections you move. The route there? Pure bumper-car chaos."}},
   {say:{anchor:{section:3},title:"Hazards",text:"Grease slides you 2 more, the Tilt-A-Whirl spins you with a die roll and a Dead Zone costs a ticket or a turn."}},
   {say:{anchor:"center",title:"Dice",text:"Every die roll shows on the rink, like a real board game. When it’s your roll, you click your die."}},
@@ -201,7 +202,7 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
       await new Promise(r=>setTimeout(r,600));
       for(const step of SCRIPT){
         if(alive.current!==mine)return;
-        if("say" in step){setChosen(step.chosen||[]);setBoost(!!step.boost);setBubble(step.say);await hold(step.say.text);continue;}
+        if("say" in step){setChosen(step.chosen||[]);setBoost(!!step.boost);setBubble(step.say);document.body.classList.toggle("spot-sound",step.spot==="sound");await hold(step.say.text);document.body.classList.remove("spot-sound");continue;}
         const r=ROUNDS[step.round];roundRef.current=step.round;setBubble(null);
         const finished=new Promise<void>(res=>{roundDone.current=res;});
         setGame(publicGame(buildGame(r.after,step.round+1,{events:r.events,initial:visualOf(state),sequence:runId*10+step.round+1}),ME));
@@ -209,7 +210,7 @@ export function Tutorial({signedIn}:{signedIn:boolean}){
       }
       if(alive.current===mine){setBubble(null);setDone(true);}
     })();
-    return ()=>{alive.current++;advance.current?.();};
+    return ()=>{alive.current++;advance.current?.();document.body.classList.remove("spot-sound");};
   },[runId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const restart=()=>{theater.skip();roundDone.current?.();setRunId(n=>n+1);};

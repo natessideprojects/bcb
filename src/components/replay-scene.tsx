@@ -38,7 +38,7 @@ function diceResult(d: DiceView) {
   const v = d.rolls[0].value;
   switch (d.purpose) {
     case "knockback": { const total = v * (d.multiplier ?? 1) + (d.bonus ?? 0); return total === v ? `Knocked back ${v}` : `${v}${d.multiplier ? ` × ${d.multiplier}` : ""}${d.bonus ? ` + ${d.bonus}` : ""} = knocked back ${total}`; }
-    case "tilt": return v < 3 ? "Spun backward 3!" : v > 4 ? "Flung forward 3!" : "Holding steady";
+    case "tilt": return v < 3 ? `Spun backward ${d.move ?? 3}!` : v > 4 ? `Flung forward ${d.move ?? 3}!` : "Holding steady";
     case "escape": return v >= 4 ? "Back in action!" : "Still stalled";
     case "rusty": return `Rusty reverses ${v}`;
     case "tie": { const best = Math.max(...d.rolls.map(r => r.value)); return d.rolls.filter(r => r.value === best).length > 1 ? "Tied again: roll again!" : "Highest roll takes the earlier flag"; }

@@ -262,3 +262,53 @@ test("knockbacks are marked so playback slows down and pauses on them",()=>{
   const knock=events.find(e=>e.type==="travel"&&e.actor===b.id);assert.ok(knock?.type==="travel"&&knock.knock===true);
   const own=events.find(e=>e.type==="travel"&&e.actor===a.id);assert.ok(own?.type==="travel"&&!own.knock);
 });
+
+test("the mini-track is protected: only another mini car can bash a mini car",()=>{
+  // A full-size car driving onto a mini car's section just shares it.
+  const g=fresh(2);g.condition="free";g.rusty=20;const [a,b]=g.players;a.pos=1;b.pos=5;b.lane="mini";
+  let events=testMove(g,a.id,4,()=>0);
+  assert.ok(!events.some(e=>e.type==="bash"),"no bash across lanes");assert.equal(a.pos,5);assert.equal(b.pos,5);assert.equal(b.tickets,3);
+  // A mini car can't bash a full-size car either.
+  const h=fresh(2);h.condition="free";h.rusty=20;const [c,d]=h.players;c.pos=1;c.lane="mini";d.pos=5;
+  events=testMove(h,c.id,4,()=>0);assert.ok(!events.some(e=>e.type==="bash"));assert.equal(d.tickets,3);
+  // Two mini cars bash as normal (and both grow back after the hit).
+  const k=fresh(2);k.condition="free";k.rusty=20;const [e1,f1]=k.players;e1.pos=1;e1.lane="mini";f1.pos=5;f1.lane="mini";
+  events=testMove(k,e1.id,4,()=>0);assert.ok(events.some(e=>e.type==="bash"&&e.victim===f1.id));assert.equal(e1.tickets,4);assert.equal(f1.tickets,2);audit(k,"mini bash");
+});
+test("Rusty can't reach the mini-track, and a mini car can't collect his bounty",()=>{
+  // Rusty reverses from 6 to 5 (die 1) onto a mini car and drives on by.
+  const g=fresh(2);g.condition="free";const [a,b]=g.players;a.pos=3;a.lane="mini";b.pos=20;g.rusty=6;
+  a.hand[0].value=2;b.hand[0].value=1;
+  const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,()=>0,1001);
+  assert.equal(g.rusty,5);assert.equal(a.pos,5);
+  assert.ok(!g.replay!.events.some(e=>e.type==="bash"),"Rusty never hits the mini car");assert.equal(a.tickets,3);audit(g,"rusty mini");
+  // A mini car landing on Rusty's section with a Speed Card shares it: no bounty, Rusty stays.
+  const h=fresh(2);h.condition="free";h.rusty=9;const [c]=h.players;c.pos=5;c.lane="mini";h.players[1].pos=20;
+  const events=testMove(h,c.id,4,()=>0);
+  assert.equal(c.pos,9);assert.equal(c.tickets,3);assert.equal(h.rusty,9);assert.ok(!events.some(e=>e.type==="bash"||e.type==="tickets"));
+  // Pushed onto Rusty's section, a mini car isn't stopped short either.
+  const k=fresh(2);k.condition="free";k.rusty=10;const [m]=k.players;m.pos=7;m.lane="mini";k.players[1].pos=20;
+  scenario(k,"M03",m.id,()=>0);assert.equal(m.pos,10);assert.equal(k.rusty,10);
+});
+test("Lead Foot Bash only bashes cars in the driver's own lane",()=>{
+  const g=fresh(3);g.condition="free";g.rusty=27;const [a,mini,main]=g.players;
+  Object.assign(a,{pos:2,lap:0});Object.assign(mini,{pos:6,lap:0,lane:"mini"});Object.assign(main,{pos:10,lap:0});
+  scenario(g,"M02",a.id,()=>0);
+  const victims=g.replay?.events.filter(e=>e.type==="bash").map(e=>e.type==="bash"&&e.victim)??g.log.filter(l=>l.text.includes("bashes")).map(l=>l.text);
+  assert.equal(a.pos,11,"still drives one past the overall leader");
+  assert.equal(mini.tickets,3,"the mini car isn't bashed");assert.equal(main.tickets,2,"the full-size car is");assert.ok(victims.length>=1);
+});
+test("Tilt-A-Whirl: 1–2 spins back, 3–4 holds, 5–6 flings forward, 5 under Overdrive",()=>{
+  // Day Fair on the 28-space track has a Tilt on 8. die() maps random r to 1+floor(r*6).
+  const face=(v:number)=>()=>(v-1)/6+0.01;
+  for(const [roll,want] of [[1,5],[2,5],[3,8],[4,8],[5,11],[6,11]] as const){
+    const g=fresh(2);g.condition="free";g.rusty=20;const [a]=g.players;a.pos=4;g.players[1].pos=24;
+    const events=testMove(g,a.id,4,face(roll));
+    const tilt=events.find(e=>e.type==="roll"&&e.purpose==="tilt");
+    assert.ok(tilt&&tilt.type==="roll"&&tilt.rolls[0].value===roll&&tilt.move===3,`tilt roll ${roll}`);
+    assert.equal(a.pos,want,`roll ${roll} ends on ${want}`);
+  }
+  const g=fresh(2);g.condition="overdrive";g.rusty=20;const [a]=g.players;a.pos=4;g.players[1].pos=24;
+  const events=testMove(g,a.id,4,face(6));
+  assert.equal(a.pos,13);assert.ok(events.some(e=>e.type==="roll"&&e.purpose==="tilt"&&e.move===5));
+});

@@ -41,7 +41,7 @@ export type Theater = {
  */
 export type DiceView = {
   id: number; purpose: RollPurpose; rolls: {actor: string; value: number}[]; phase: "waiting" | "rolling" | "done";
-  mine: boolean; waitMs: number; auto?: boolean; multiplier?: number; bonus?: number; card?: number;
+  mine: boolean; waitMs: number; auto?: boolean; multiplier?: number; bonus?: number; card?: number; move?: number;
 };
 /** A narration hook point: the tutorial uses these to time its speech bubbles. */
 export type Beat = {type: "event"; event: ReplayEvent; index: number} | {type: "go"} | {type: "end"};
@@ -187,7 +187,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           if (e.actor === "rusty") { if (knockedAway) call([`The bash sends Rusty careening ${secs(steps)} across the rink to section ${last.pos}`]); else if (e.teleport) call([`Rusty runs off to section ${last.pos}`]); else if (!afterRustyRoll) call([`Rusty reverses ${secs(steps)}`]); }
           else if (e.teleport) {
             const first = e.path[0];
-            call([{who: e.actor}, last.lane !== first.lane ? (last.lane === "mini" ? " shrinks onto the mini-track" : " grows back to full size") : last.pos === 0 ? " goes back to the Start Grid" : ` takes the open section ${last.pos}`]);
+            call([{who: e.actor}, last.lane !== first.lane ? (last.lane === "mini" ? " shrinks onto the mini-track, safe from full-size cars and Rusty" : " grows back to full size") : last.pos === 0 ? " goes back to the Start Grid" : ` takes the open section ${last.pos}`]);
           } else {
             let verb = "moves";
             if (lastKnock) verb = karma === e.actor ? "rides the Karma forward" : "is knocked back";
@@ -325,7 +325,7 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           const mine = e.rolls.some(r => r.actor === userId);
           const waitMs = mine ? (hooksRef.current?.rollWait?.() ?? ROLL_WAIT) : 0;
           const roller = e.rolls.length === 1 ? e.rolls[0].actor : null;
-          state.dice = {id: ++diceSeq, purpose: e.purpose, rolls: e.rolls, phase: mine ? "waiting" : "rolling", mine, waitMs, multiplier: e.multiplier, bonus: e.bonus, card: e.card};
+          state.dice = {id: ++diceSeq, purpose: e.purpose, rolls: e.rolls, phase: mine ? "waiting" : "rolling", mine, waitMs, multiplier: e.multiplier, bonus: e.bonus, card: e.card, move: e.move};
           state.caption = null;
           if (roller && roller !== "rusty") state.spotlight = roller;
           paint();
@@ -349,7 +349,8 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
             const total = v * (e.multiplier ?? 1) + (e.bonus ?? 0);
             call([who, ` rolls ${v}: knocked back ${total === v ? secs(v) : `${v}${e.multiplier ? ` × ${e.multiplier}` : ""}${e.bonus ? ` + ${e.bonus}` : ""} = ${secs(total)}`}`], "bash");
           } else if (e.purpose === "tilt") {
-            call([who, ` rolls ${v}: ${v < 3 ? "spun backward!" : v > 4 ? "flung forward!" : "holding steady"}`]);
+            const spin = e.move ?? 3;
+            call([who, ` rolls ${v}: ${v < 3 ? `spun back ${secs(spin)}!` : v > 4 ? `flung forward ${secs(spin)}!` : "holding steady"}`]);
             say(v < 3 ? "hazard_tilt_back" : v > 4 ? "hazard_tilt_forward" : "hazard_tilt_stay", 2);
           } else if (e.purpose === "escape") {
             call([who, ` rolls ${v} to escape the stall: ${v >= 4 ? "back in action!" : "still stalled"}`], v >= 4 ? "good" : "bad");

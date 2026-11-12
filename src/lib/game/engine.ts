@@ -6,7 +6,7 @@ export type Midway={id:string;kind:EventId;available:number};
 export type Pick={primary:string;extra?:string;boost?:string};
 export type Pose={pos:number;lap:number;lane:"main"|"mini"};
 export type Visual={players:Record<string,Pose>;rusty:number;direction:1|-1;condition:Condition;milestone:number;tickets?:Record<string,number>};
-export type ReplayEvent={type:"travel";actor:string;path:Pose[];teleport?:boolean;knock?:boolean}|{type:"bash";actor:string|null;victim:string;pos:number;lane:"main"|"mini";by?:string|null}|{type:"reveal";actor:string;value:number;extra?:number;boost?:EventId;auto?:boolean}|{type:"doubles";actors:string[];value:number}|{type:"card";actor:string;kind:EventId}|{type:"draw";actor:string;count:number;reason:string}|{type:"hazard";actor:string;kind:"grease"|"tilt"|"dead";pos:number;lane:"main"|"mini";roll?:number;result:"slide"|"forward"|"back"|"stay"|"paid"|"skip"}|{type:"lap";actor:string;delta:number;total?:number}|{type:"tickets";actor:string;delta:number;reason:"bash"|"bounty"|"dead"|"card"|"prize";total?:number}|{type:"pay";from:string;to:string|null;paid:number;bank:number;totals:Record<string,number>}|{type:"roll";purpose:RollPurpose;rolls:{actor:string;value:number}[];multiplier?:number;bonus?:number;card?:number}|{type:"condition";condition:Condition}|{type:"stall";actor:string;pos:number;pileup:boolean};
+export type ReplayEvent={type:"travel";actor:string;path:Pose[];teleport?:boolean;knock?:boolean}|{type:"bash";actor:string|null;victim:string;pos:number;lane:"main"|"mini";by?:string|null}|{type:"reveal";actor:string;value:number;extra?:number;boost?:EventId;auto?:boolean}|{type:"doubles";actors:string[];value:number}|{type:"card";actor:string;kind:EventId}|{type:"draw";actor:string;count:number;reason:string}|{type:"hazard";actor:string;kind:"grease"|"tilt"|"dead";pos:number;lane:"main"|"mini";roll?:number;result:"slide"|"forward"|"back"|"stay"|"paid"|"skip"}|{type:"lap";actor:string;delta:number;total?:number}|{type:"tickets";actor:string;delta:number;reason:"bash"|"bounty"|"dead"|"card"|"prize";total?:number}|{type:"pay";from:string;to:string|null;paid:number;bank:number;totals:Record<string,number>}|{type:"roll";purpose:RollPurpose;rolls:{actor:string;value:number}[];multiplier?:number;bonus?:number;card?:number;move?:number}|{type:"condition";condition:Condition}|{type:"stall";actor:string;pos:number;pileup:boolean};
 /** Why a die was rolled. The roller is a driver id, or "rusty" for the house car. */
 export type RollPurpose="knockback"|"tilt"|"escape"|"rusty"|"tie";
 export type RoundReplay={sequence?:number;round:number;initial:Visual;events:ReplayEvent[]};
@@ -50,11 +50,12 @@ class Referee {
   cardNote(p:Player,kind:EventId,how:CardNote["how"]){this.g.cards=[...(this.g.cards||[]),{round:this.g.round,actor:p.id,kind,how}].slice(-16);}
   use(p:Player,kind:EventId){const i=p.held.findIndex(c=>c.kind===kind&&c.available<=this.g.round);if(i<0)return false;const [c]=p.held.splice(i,1);this.g.eventDiscard.push(c);this.emit({type:"card",actor:p.id,kind});this.cardNote(p,kind,"used");this.note(`${p.name} uses ${EVENTS[kind].name}.`);return true;}
   chain(owner:string|null,action:(c:Chain)=>void){const c:Chain={owner,hit:new Set(),hazards:new Set(),defenses:new Set(),grow:new Set(),steps:0};action(c);for(const p of this.seatOrder()){if(c.grow.has(p.id)&&p.lane==="mini"){const prior=pose(p);p.lane="main";p.shrink=0;this.movement(p.id,prior,pose(p),true);if(p.pos&&this.occupied(p,p.pos))this.safe(p,p.pos,-this.g.direction,false);this.note(`${p.name} grows back to full size.`);}}}
-  occupied(p:Player,n:number){return n!==0&&(n===this.g.rusty||this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===n));}
+  // Rusty drives the main track only: the mini-track is out of his reach.
+  occupied(p:Player,n:number){return n!==0&&((p.lane==="main"&&n===this.g.rusty)||this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===n));}
   safe(p:Player,n:number,direction:number,before=true){let at=before?this.wrap(n-direction):n;for(let i=0;i<this.size+1;i++){if(!this.occupied(p,at)){const beforePose=pose(p);p.pos=at;this.movement(p.id,beforePose,pose(p),true);return;}at=this.wrap(at-direction);}throw new GameError("No safe space available.");}
   markGrow(p:Player,c:Chain){if(p.lane==="mini")c.grow.add(p.id);}
   step(p:Player,d:number,c:Chain){const beforePose=pose(p),old=p.pos,forward=d*this.g.direction>0;let crossing=0;if(old===0){p.pos=d>0?1:this.size;if(!forward)crossing=-1;}else{p.pos=this.wrap(old+d);if(old===this.size&&d>0)crossing=this.g.direction;if(old===1&&d<0)crossing=-this.g.direction;}p.lap+=crossing;this.delta[p.id]=(this.delta[p.id]||0)+crossing;this.g.highLap=Math.max(this.g.highLap,p.lap);if(p.lane==="mini"){p.shrink=Math.max(0,p.shrink+d*this.g.direction);if(p.shrink>=this.size)this.markGrow(p,c);}if(crossing>0)this.stat(p,"laps",crossing);this.movement(p.id,beforePose,pose(p));}
-  directBashPossible(p:Player,distance:number){const d=this.g.direction;let at=p.pos;let usedDaddy=false;for(let i=0;i<distance;i++){at=at===0?(d>0?1:this.size):this.wrap(at+d);const stalled=this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===at&&o.stalled);if(stalled){if(usedDaddy||p.policy.daddy!=="intercept"||!this.usable(p,"M12"))return false;usedDaddy=true;}}return at===this.g.rusty||this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===at&&!o.stalled);}
+  directBashPossible(p:Player,distance:number){const d=this.g.direction;let at=p.pos;let usedDaddy=false;for(let i=0;i<distance;i++){at=at===0?(d>0?1:this.size):this.wrap(at+d);const stalled=this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===at&&o.stalled);if(stalled){if(usedDaddy||p.policy.daddy!=="intercept"||!this.usable(p,"M12"))return false;usedDaddy=true;}}return (p.lane==="main"&&at===this.g.rusty)||this.g.players.some(o=>o.id!==p.id&&o.lane===p.lane&&o.pos===at&&!o.stalled);}
   speed(p:Player,distance:number){if(p.compelled&&!this.directBashPossible(p,distance)){this.note(`${p.name} is watched by Sauron: no direct bash, so the card is spent without moving.`);return;}this.note(`${p.name} moves ${distance}.`,"move");this.chain(p.id,c=>this.travel(p,distance,"speed",c));}
   delta:Record<string,number>={};
   ties:{actor:string;value:number}[][]=[];
@@ -70,7 +71,8 @@ class Referee {
       }
     }
     const end=p.pos,lane=p.lane;
-    if(end===this.g.rusty){if(source==="speed"){p.tickets+=2;p.compelled=false;this.markGrow(p,c);let steps=Math.floor(this.size/2);while(this.g.players.some(o=>o.pos===this.wrap(end+steps*this.g.direction)))steps++;const next=this.wrap(end+steps*this.g.direction);this.emit({type:"bash",actor:p.id,victim:"rusty",pos:end,lane:p.lane});this.emit({type:"tickets",actor:p.id,delta:2,reason:"bounty",total:p.tickets});this.stat(p,"bashes");
+    // Lanes never mix: mini-track cars only bash (and are bashed by) other mini-track cars.
+    if(lane==="main"&&end===this.g.rusty){if(source==="speed"){p.tickets+=2;p.compelled=false;this.markGrow(p,c);let steps=Math.floor(this.size/2);while(this.g.players.some(o=>o.lane==="main"&&o.pos===this.wrap(end+steps*this.g.direction)))steps++;const next=this.wrap(end+steps*this.g.direction);this.emit({type:"bash",actor:p.id,victim:"rusty",pos:end,lane:p.lane});this.emit({type:"tickets",actor:p.id,delta:2,reason:"bounty",total:p.tickets});this.stat(p,"bashes");
       // The bash knocks Rusty half a lap ahead: he drives there, he doesn't teleport.
       this.emit({type:"travel",actor:"rusty",path:Array.from({length:steps+1},(_,i)=>({pos:this.wrap(end+i*this.g.direction),lap:0,lane:"main" as const}))});this.g.rusty=next;this.note(`${p.name} bashes Rusty for 2 tickets! Rusty jumps to ${next}.`,"bash");}else{this.safe(p,end,direction);this.note(`${p.name} stops safely before Rusty.`);return;}}
     else{
@@ -118,7 +120,7 @@ class Referee {
     const n=p.pos,key=p.id+":"+n;if(c.hazards.has(key))return;
     const map=gameMap(this.g);if(![...map.grease,...map.tilt,...map.dead].includes(n))return;c.hazards.add(key);
     if(map.grease.includes(n)){const d=this.g.condition==="rain"?4:2;this.emit({type:"hazard",actor:p.id,kind:"grease",pos:n,lane:p.lane,result:"slide"});this.note(`${p.name} slides ${d} from Grease ${n}.`,"move");this.travel(p,d,"forced",c);}
-    else if(map.tilt.includes(n)){const roll=this.die(),d=this.g.condition==="overdrive"?5:3;this.emit({type:"hazard",actor:p.id,kind:"tilt",pos:n,lane:p.lane,roll,result:roll<3?"back":roll>4?"forward":"stay"});this.emit({type:"roll",purpose:"tilt",rolls:[{actor:p.id,value:roll}]});this.note(`${p.name} rolls ${roll} on Tilt ${n}.`,"move");if(roll<3)this.travel(p,-d,"forced",c);if(roll>4)this.travel(p,d,"forced",c);}
+    else if(map.tilt.includes(n)){const roll=this.die(),d=this.g.condition==="overdrive"?5:3;this.emit({type:"hazard",actor:p.id,kind:"tilt",pos:n,lane:p.lane,roll,result:roll<3?"back":roll>4?"forward":"stay"});this.emit({type:"roll",purpose:"tilt",rolls:[{actor:p.id,value:roll}],move:d});this.note(`${p.name} rolls ${roll} on Tilt ${n}.`,"move");if(roll<3)this.travel(p,-d,"forced",c);if(roll>4)this.travel(p,d,"forced",c);}
     else if(this.g.condition!=="free"){const cost=this.g.condition==="inspector"?2:1;if(p.policy.dead==="pay"&&p.tickets>=cost){p.tickets-=cost;this.emit({type:"hazard",actor:p.id,kind:"dead",pos:n,lane:p.lane,result:"paid"});this.emit({type:"tickets",actor:p.id,delta:-cost,reason:"dead",total:p.tickets});this.note(`${p.name} pays ${cost} at the Dead Zone.`);}else{p.skip=true;this.emit({type:"hazard",actor:p.id,kind:"dead",pos:n,lane:p.lane,result:"skip"});this.note(`${p.name} must skip next round after the Dead Zone.`);}}
   }
   replace(p:Player,count:number){const cards=[...p.hand].sort((a,b)=>b.value-a.value).slice(0,count);p.hand=p.hand.filter(c=>!cards.some(x=>x.id===c.id));this.g.speedDiscard.push(...cards);this.drawSpeed(p,cards.length);}
@@ -133,18 +135,21 @@ class Referee {
         const rank=(driver:Player)=>position(driver,direction,this.size);
         const progress=(driver:Player)=>driver.pos===0?0:direction>0?driver.pos:this.size+1-driver.pos;
         const opponents=this.g.players.filter(driver=>driver.id!==p.id);
+        // You pass everyone, but only bash the cars in your own lane.
+        const rivals=(list:Player[])=>list.filter(driver=>driver.lane===p.lane);
         const ahead=opponents.filter(driver=>rank(driver)>rank(p));
         let distance:number;
         let targets:Player[];
         if(ahead.length){
-          targets=ahead.sort((a,b)=>rank(a)-rank(b)||a.seat-b.seat);
-          const leader=targets[targets.length-1];
+          const sorted=ahead.sort((a,b)=>rank(a)-rank(b)||a.seat-b.seat);
+          const leader=sorted[sorted.length-1];
+          targets=rivals(sorted);
           distance=(leader.lap-p.lap)*this.size+progress(leader)-progress(p)+1;
         }else{
           // A leader gets a full circuit. A driver sharing the starting section
           // is passed at the end of that circuit, not at the start.
           const forwardOffset=(driver:Player)=>this.wrap(progress(driver)-progress(p));
-          targets=opponents.sort((a,b)=>forwardOffset(a)-forwardOffset(b)||a.seat-b.seat);
+          targets=rivals(opponents).sort((a,b)=>forwardOffset(a)-forwardOffset(b)||a.seat-b.seat);
           distance=this.size+(p.pos===0?1:0);
           let destination=this.wrap(p.pos===0?(direction>0?1:this.size):p.pos);
           while(this.occupied(p,destination)){
@@ -207,7 +212,7 @@ class Referee {
     const mod=(v:number)=>Math.max(1,v+(g.condition==="surge"?1:g.condition==="brownout"?-1:0));
     for(const p of order){const m=moves.get(p.id)!;if(p.stalled){this.note(`${p.name}'s committed movement is canceled by the stall.`);continue;}const base=m.boost?.kind==="M10"?11:m.primary.value+(m.boost?.kind==="M05"?m.extra!.value:0);this.speed(p,mod(base));if(m.boost?.kind==="M09"&&!p.stalled)this.speed(p,mod(m.extra!.value));}
     this.sauronCountdown();
-    for(let i=0;i<(g.condition==="rampage"?2:1);i++){const roll=this.die();this.emit({type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:roll}]});const path:Pose[]=[{pos:g.rusty,lap:0,lane:"main"}];for(let step=0;step<roll;step++)path.push({pos:this.wrap(g.rusty-(step+1)*g.direction),lap:0,lane:"main"});this.emit({type:"travel",actor:"rusty",path});g.rusty=path.at(-1)!.pos;this.note(`Rusty rolls ${roll} and reverses to ${g.rusty}.`,"move");const victims=g.players.filter(p=>p.pos===g.rusty).sort((a,b)=>a.seat-b.seat);this.chain(null,c=>{for(const p of victims)if(p.pos===g.rusty&&!c.hit.has(p.id))this.bash(p,null,c);});}
+    for(let i=0;i<(g.condition==="rampage"?2:1);i++){const roll=this.die();this.emit({type:"roll",purpose:"rusty",rolls:[{actor:"rusty",value:roll}]});const path:Pose[]=[{pos:g.rusty,lap:0,lane:"main"}];for(let step=0;step<roll;step++)path.push({pos:this.wrap(g.rusty-(step+1)*g.direction),lap:0,lane:"main"});this.emit({type:"travel",actor:"rusty",path});g.rusty=path.at(-1)!.pos;this.note(`Rusty rolls ${roll} and reverses to ${g.rusty}.`,"move");const victims=g.players.filter(p=>p.lane==="main"&&p.pos===g.rusty).sort((a,b)=>a.seat-b.seat);this.chain(null,c=>{for(const p of victims)if(p.lane==="main"&&p.pos===g.rusty&&!c.hit.has(p.id))this.bash(p,null,c);});}
     if(g.manualMidway && pending.size){
       g.midway={queue:this.ordered().flatMap(p=>(pending.get(p.id)||[]).map(card=>({actor:p.id,card}))),revealed:false,delta:{...this.delta},played,boosts};
       g.phase="midway";g.deadline=now+(g.pace==="quick"?60000+replayBudget(g.replay,humansOf(g)):86400000);

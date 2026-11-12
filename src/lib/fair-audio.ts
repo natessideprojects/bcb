@@ -1,10 +1,17 @@
 "use client";
 // The fairground sound system: FilmCow sound effects and the announcer play through
 // Web Audio (decoded once, instant to retrigger, many at a time); the music loop is a
-// plain <audio> element. Everything stays silent until the player turns sound on.
+// plain <audio> element. Sound is on by default, but browsers only allow audio after
+// the player taps, clicks or presses a key, so it starts on their first interaction.
+// The speaker button mutes it, and that choice is remembered on this device.
 import {SFX, VO, type SfxName, type VoClip} from "./audio-manifest";
 
-export type FairSettings = {enabled: boolean; music: number; effects: number; voice: number; animation: "normal" | "fast" | "off"};
+export type FairSettings = {
+  /** The player wants sound (default on; the speaker button mutes it). */
+  enabled: boolean; music: number; effects: number; voice: number; animation: "normal" | "fast" | "off";
+  /** Audio has been started by a tap, click or key press, as browsers require. */
+  ready: boolean;
+};
 export type {SfxName, VoClip};
 // Drivers are announced by number ("Driver one!" … "Driver six!", clips who_1–who_6),
 // never by colour, because a car skin can change a car's colour.
@@ -13,7 +20,8 @@ export type Clip = VoClip;
 export type Part = Clip | {clip: Clip; fallback?: Clip};
 export const FAIRGROUND_MUSIC = {title:"Fairground Fun",src:"/audio/music/fairground-fun.mp3"} as const;
 const KEY = "bcb.fair-settings.v1";
-const defaults: FairSettings = {enabled: false, music: 0.2, effects: 0.7, voice: 0.9, animation: "normal"};
+const WELCOMED = "bcb.fair-welcomed"; // the welcome line plays once per browser session
+const defaults: FairSettings = {enabled: true, music: 0.2, effects: 0.7, voice: 0.9, animation: "normal", ready: false};
 let settings: FairSettings = {...defaults}, loaded = false;
 const listeners = new Set<() => void>();
 const publish = () => { for (const fn of listeners) fn(); };
@@ -59,7 +67,24 @@ function load(url: string) {
 }
 const sfxUrl = (name: SfxName, n: number) => `/audio/sfx/${name}-${n}.mp3`;
 const voUrl = (clip: Clip) => `/audio/vo/${clip}.mp3`;
-const audible = (level: number) => settings.enabled && level > 0 && typeof document !== "undefined" && !document.hidden;
+const audible = (level: number) => settings.enabled && settings.ready && level > 0 && typeof document !== "undefined" && !document.hidden;
+function save() {
+  const {music: m, effects, voice: v, animation} = settings;
+  try { localStorage.setItem(KEY, JSON.stringify({music: m, effects, voice: v, animation, muted: !settings.enabled})); } catch {}
+}
+/** Starts the audio. Only call from inside a click, tap or key press. */
+function unlock() {
+  const c = context();
+  if (!c) return;
+  void c.resume().catch(() => {});
+  if (music && settings.music > 0) void music.play().catch(() => {});
+  if (!settings.ready) settings = {...settings, ready: true};
+  void preload();
+}
+function firstVisit() {
+  try { if (sessionStorage.getItem(WELCOMED)) return false; sessionStorage.setItem(WELCOMED, "1"); } catch {}
+  return true;
+}
 
 function syncMusic() {
   if (!music) return;
@@ -129,17 +154,33 @@ export const fairSound = {
       for (const key of ["music", "effects", "voice"] as const) if (typeof saved[key] === "number") settings[key] = Math.max(0, Math.min(1, saved[key]));
       if (["normal", "fast", "off"].includes(saved.animation)) settings.animation = saved.animation;
       else if (matchMedia("(prefers-reduced-motion: reduce)").matches) settings.animation = "off";
+      if (saved.muted === true) settings.enabled = false;
     } catch {}
     document.addEventListener("visibilitychange", () => { syncMusic(); if (document.hidden) this.cancel(); });
+    // Sound is on by default: start it on the player's first real click or key press.
+    // The speaker button handles its own clicks, so clicking it never mutes by accident.
+    const kinds = ["click", "keydown"] as const;
+    const first = (e: Event) => {
+      if (settings.ready) { for (const k of kinds) window.removeEventListener(k, first, true); return; }
+      if (!settings.enabled || !e.isTrusted || (e instanceof KeyboardEvent && (e.key === "Escape" || e.repeat))) return;
+      if (e.target instanceof Element && e.target.closest(".sound-power")) return;
+      this.start(firstVisit());
+    };
+    for (const k of kinds) window.addEventListener(k, first, true);
     settings = {...settings};
     publish();
   },
   /** Call from a click or tap: browsers only start audio after a user gesture. */
-  set(patch: Partial<FairSettings>) {
+  set(patch: Partial<Omit<FairSettings, "ready">>) {
     settings = {...settings, ...patch};
-    try { localStorage.setItem(KEY, JSON.stringify({...settings, enabled: false})); } catch {}
-    if (settings.enabled) { void context()?.resume(); void preload(); } else this.cancel();
+    save();
+    if (settings.enabled) unlock(); else this.cancel();
     syncMusic(); volumes(); publish();
+  },
+  /** Turns sound on and starts it (from a click or tap), optionally with the welcome line. */
+  start(welcome = false) {
+    this.set({enabled: true});
+    if (welcome) this.say("start_welcome", 3);
   },
   cancel() {
     generation++;
