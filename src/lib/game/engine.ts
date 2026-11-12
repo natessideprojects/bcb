@@ -6,7 +6,7 @@ export type Midway={id:string;kind:EventId;available:number};
 export type Pick={primary:string;extra?:string;boost?:string};
 export type Pose={pos:number;lap:number;lane:"main"|"mini"};
 export type Visual={players:Record<string,Pose>;rusty:number;direction:1|-1;condition:Condition;milestone:number;tickets?:Record<string,number>};
-export type ReplayEvent={type:"travel";actor:string;path:Pose[];teleport?:boolean;knock?:boolean}|{type:"bash";actor:string|null;victim:string;pos:number;lane:"main"|"mini";by?:string|null}|{type:"reveal";actor:string;value:number;extra?:number;boost?:EventId;auto?:boolean}|{type:"doubles";actors:string[];value:number;last?:boolean}|{type:"card";actor:string;kind:EventId}|{type:"draw";actor:string;count:number;reason:string}|{type:"hazard";actor:string;kind:"grease"|"tilt"|"dead";pos:number;lane:"main"|"mini";roll?:number;result:"slide"|"forward"|"back"|"stay"|"paid"|"skip"}|{type:"lap";actor:string;delta:number;total?:number}|{type:"tickets";actor:string;delta:number;reason:"bash"|"bounty"|"dead"|"card"|"prize";total?:number}|{type:"pay";from:string;to:string|null;paid:number;bank:number;totals:Record<string,number>}|{type:"roll";purpose:RollPurpose;rolls:{actor:string;value:number}[];multiplier?:number;bonus?:number;card?:number;move?:number}|{type:"condition";condition:Condition}|{type:"stall";actor:string;pos:number;pileup:boolean};
+export type ReplayEvent={type:"travel";actor:string;path:Pose[];teleport?:boolean;knock?:boolean}|{type:"bash";actor:string|null;victim:string;pos:number;lane:"main"|"mini";by?:string|null}|{type:"reveal";actor:string;value:number;extra?:number;boost?:EventId;auto?:boolean}|{type:"doubles";actors:string[];value:number;last?:boolean}|{type:"card";actor:string;kind:EventId}|{type:"draw";actor:string;count:number;reason:string}|{type:"hazard";actor:string;kind:"grease"|"tilt"|"dead";pos:number;lane:"main"|"mini";roll?:number;result:"slide"|"forward"|"back"|"stay"|"paid"|"skip"}|{type:"lap";actor:string;delta:number;total?:number}|{type:"tickets";actor:string;delta:number;reason:"bash"|"bounty"|"dead"|"card"|"prize";total?:number}|{type:"pay";from:string;to:string|null;paid:number;bank:number;totals:Record<string,number>;karma?:boolean}|{type:"roll";purpose:RollPurpose;rolls:{actor:string;value:number}[];multiplier?:number;bonus?:number;card?:number;move?:number}|{type:"condition";condition:Condition}|{type:"stall";actor:string;pos:number;pileup:boolean};
 /** Why a die was rolled. The roller is a driver id, or "rusty" for the house car. */
 export type RollPurpose="knockback"|"tilt"|"escape"|"rusty"|"tie";
 export type RoundReplay={sequence?:number;round:number;initial:Visual;events:ReplayEvent[]};
@@ -111,13 +111,24 @@ class Referee {
     this.emit({type:"roll",purpose:"knockback",rolls:[{actor:victim.id,value:roll}],...(multiplier>1?{multiplier}:{}),...(this.g.condition==="bumper"?{bonus:2}:{})});
     const chainHit=!!attacker&&!direct;
     this.note(`${chainHit?"Chain reaction! ":""}${attacker?attacker.name:"Rusty"} bashes ${victim.name}. Rolled ${roll}${multiplier>1?" × "+multiplier:""}${this.g.condition==="bumper"?" + 2":""}.`,"bash");
-    this.collect(victim,owner);
-    if(!c.defenses.has(victim.id)&&victim.policy.karma==="use"&&this.use(victim,"M11")){c.defenses.add(victim.id);distance=-distance;}
+    // Karma Bash flips the hit: the bashed driver bounces forward and the basher pays them.
+    if(!c.defenses.has(victim.id)&&victim.policy.karma==="use"&&this.use(victim,"M11")){c.defenses.add(victim.id);distance=-distance;this.repay(victim,owner);}
+    else this.collect(victim,owner);
     const from=this.g.replay?.round===this.g.round?this.g.replay.events.length:-1;
     this.travel(victim,-distance,"forced",c);
     // Mark the knockback so the playback can slow down and pause on it.
     const knock=from<0?undefined:this.g.replay!.events.slice(from).find(e=>e.type==="travel"&&e.actor===victim.id);
     if(knock?.type==="travel")knock.knock=true;
+  }
+  // Karma Bash: the driver whose move caused the hit pays the bashed driver instead. If they're
+  // short the bank covers it, so Karma always pays; when Rusty did the hitting, the bank pays.
+  repay(victim:Player,owner:Player|null){
+    const due=owner&&this.g.condition==="judging"?2:1,paid=owner?Math.min(due,owner.tickets):0,bank=due-paid;
+    if(owner)owner.tickets-=paid;victim.tickets+=due;
+    const totals:Record<string,number>={[victim.id]:victim.tickets};if(owner)totals[owner.id]=owner.tickets;
+    this.emit({type:"pay",from:owner?.id??"rusty",to:victim.id,paid,bank,totals,karma:true});
+    const t=(n:number)=>`${n} ticket${n===1?"":"s"}`;
+    this.note(owner?(paid?`Karma! ${owner.name} pays ${victim.name} ${t(paid)}${bank?`; the bank adds ${bank}`:""}.`:`Karma! ${owner.name} has no tickets, so the bank pays ${victim.name} ${t(due)}.`):`Karma! The bank pays ${victim.name} ${t(due)} for Rusty's hit.`,"bash");
   }
   collect(victim:Player,owner:Player|null){
     const due=owner&&this.g.condition==="judging"?2:1,paid=Math.min(due,victim.tickets),bank=owner?due-paid:0;

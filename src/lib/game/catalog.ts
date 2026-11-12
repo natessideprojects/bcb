@@ -10,7 +10,7 @@ export const EVENTS = {
   M08: {name:"Disco Bash", type:"INSTANT", count:4, icon:"sparkles", text:"Exchange up to two highest unplayed Speed Cards."},
   M09: {name:"Groundhog Day", type:"BOOST", count:2, icon:"repeat", text:"Play two Speed Cards. Make two separate moves, primary card first."},
   M10: {name:"It’s One Louder", type:"BOOST", count:2, icon:"gauge", text:"Your primary Speed Card moves 11, before the Condition modifier."},
-  M11: {name:"Karma Bash", type:"DEFENSE", count:2, icon:"shield", text:"After a bash, take the same knockback forward instead of backward. The hit still counts, so you still hand over the ticket."},
+  M11: {name:"Karma Bash", type:"DEFENSE", count:2, icon:"shield", text:"When you’re bashed, bounce forward instead of back, and the basher hands you the ticket instead of taking yours."},
   M12: {name:"Daddy Take the Wheel", type:"DEFENSE", count:1, icon:"shield", text:"Avoid one pile-up, or clear your own stall at the start of a round."},
   M13: {name:"Token Machine Malfunction", type:"INSTANT", count:1, icon:"ticket", text:"Collect 1 race ticket from the bank."},
   M14: {name:"Hungry Seat", type:"INSTANT", count:1, icon:"ticket", text:"Lose 1 race ticket to the bank. Your count can’t go below zero."},

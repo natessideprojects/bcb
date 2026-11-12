@@ -267,9 +267,11 @@ export function useRoundReplay(game: PublicGame | undefined, userId: string, hoo
           if (e.to) { const to = where(e.to); fx("tickets", {x: to.x, y: to.y - 40}, `+${due}`, "good"); }
           if (e.paid) sfx("ticket-lose");
           if (e.to) sfx("ticket", {delay: 260});
-          if (e.to) call(e.paid === 0 ? [{who: e.from}, " is out of tickets, so the bank pays ", {who: e.to}, ` ${tix(due)}`] : e.bank ? [{who: e.from}, ` pays ${e.paid} and the bank adds ${e.bank} for `, {who: e.to}] : [{who: e.from}, " pays ", {who: e.to}, ` ${tix(e.paid)}`], "good");
+          // Karma Bash flips it: the basher (or the bank, for Rusty's hit) pays the bashed driver.
+          if (e.karma && e.to) call(e.from === "rusty" ? ["Karma! The bank pays ", {who: e.to}, ` ${tix(due)} for Rusty’s hit`] : e.paid === 0 ? ["Karma! ", {who: e.from}, " is out of tickets, so the bank pays ", {who: e.to}, ` ${tix(due)}`] : ["Karma! ", {who: e.from}, " pays ", {who: e.to}, ` ${tix(e.paid)}${e.bank ? ` and the bank adds ${e.bank}` : ""}`], "good");
+          else if (e.to) call(e.paid === 0 ? [{who: e.from}, " is out of tickets, so the bank pays ", {who: e.to}, ` ${tix(due)}`] : e.bank ? [{who: e.from}, ` pays ${e.paid} and the bank adds ${e.bank} for `, {who: e.to}] : [{who: e.from}, " pays ", {who: e.to}, ` ${tix(e.paid)}`], "good");
           else call(e.paid ? [{who: e.from}, ` loses ${tix(e.paid)} to Rusty`] : [{who: e.from}, " has no tickets for Rusty to take"], "bad");
-          if (e.paid) say([lines.who(seat(e.from)), lines.pay()], 1);
+          if (e.paid && e.from !== "rusty") say([lines.who(seat(e.from)), lines.pay()], 1);
           else if (e.to) say("bash_ticket", 1);
           if (e.paid && mineHit(e.from)) sfx("aww", {delay: 200, volume: 0.6});
           paint();

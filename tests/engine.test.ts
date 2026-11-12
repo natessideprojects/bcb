@@ -116,10 +116,11 @@ function audit(g:Game,label:string){
   const replay=g.replay!;assert.ok(replay.initial.tickets,label+": replay records starting tickets");
   const run:Record<string,number>={...replay.initial.tickets};
   replay.events.forEach((e,i)=>{
-    if(e.type==="pay"){const due=e.paid+e.bank;if(e.to)assert.ok(due===1||due===2,label+": a driver's bash pays 1 or 2 tickets");else assert.ok(e.paid<=1,label+": Rusty takes at most 1");assert.ok(e.paid>=0&&e.paid<=run[e.from],label+": victim pays only what they hold");run[e.from]-=e.paid;if(e.to)run[e.to]+=due;else assert.equal(e.bank,0,label+": the bank never pays Rusty");for(const [id,t] of Object.entries(e.totals))assert.equal(run[id],t,label+": pay totals");}
+    if(e.type==="pay"&&e.karma){const due=e.paid+e.bank;assert.ok(due===1||due===2,label+": Karma pays 1 or 2");if(e.from==="rusty")assert.equal(e.paid,0,label+": Rusty never pays from his own pocket");else{assert.ok(e.paid<=run[e.from],label+": the basher pays only what they hold");run[e.from]-=e.paid;}run[e.to!]+=due;for(const [id,t] of Object.entries(e.totals))assert.equal(run[id],t,label+": karma totals");}
+    else if(e.type==="pay"){const due=e.paid+e.bank;if(e.to)assert.ok(due===1||due===2,label+": a driver's bash pays 1 or 2 tickets");else assert.ok(e.paid<=1,label+": Rusty takes at most 1");assert.ok(e.paid>=0&&e.paid<=run[e.from],label+": victim pays only what they hold");run[e.from]-=e.paid;if(e.to)run[e.to]+=due;else assert.equal(e.bank,0,label+": the bank never pays Rusty");for(const [id,t] of Object.entries(e.totals))assert.equal(run[id],t,label+": pay totals");}
     if(e.type==="tickets"){run[e.actor]+=e.delta;assert.equal(run[e.actor],e.total,label+": ticket totals");}
     if(e.type==="lap"){run[e.actor]=Math.max(0,run[e.actor]+e.delta);assert.equal(run[e.actor],e.total,label+": lap totals");}
-    if(e.type==="bash"&&e.victim!=="rusty"){const next=replay.events.slice(i+1).find(x=>x.type==="pay"||x.type==="bash");assert.ok(next?.type==="pay"&&next.from===e.victim&&next.to===(e.by??null),label+": every bash on a driver is paid for");}
+    if(e.type==="bash"&&e.victim!=="rusty"){const next=replay.events.slice(i+1).find(x=>x.type==="pay"||x.type==="bash");assert.ok(next?.type==="pay"&&(next.karma?next.to===e.victim&&next.from===(e.by??"rusty"):next.from===e.victim&&next.to===(e.by??null)),label+": every bash on a driver is paid for");}
     if(e.type==="bash"&&e.victim==="rusty"){const next=replay.events[i+1];assert.ok(next?.type==="tickets"&&next.reason==="bounty"&&next.actor===e.actor,label+": Rusty's bounty is paid");}
   });
   for(const p of g.players){assert.equal(run[p.id],p.tickets,`${label}: ${p.name}'s tickets match the replay`);assert.ok(p.tickets>=0);}
@@ -328,4 +329,23 @@ test("a car that crosses the line but stops short of Rusty behind it isn't paid 
   scenario(g,"M03",a.id,()=>0); // everyone drives forward 3: A would end on Rusty at 1
   assert.equal(a.pos,28);assert.equal(a.lap,0);assert.equal(a.tickets,3);
   assert.ok(!g.replay!.events.some(e=>e.type==="lap"&&e.actor===a.id));
+});
+
+test("Karma Bash flips the ticket: the bashed driver bounces forward and the basher pays them",()=>{
+  const g=attack("M17",true);const [p,v]=g.players;
+  const ev=g.replay!.events;const card=ev.findIndex(e=>e.type==="card"&&e.kind==="M11"),pay=ev.findIndex(e=>e.type==="pay");
+  assert.ok(card>=0&&pay>card,"Karma shows before the ticket changes hands");
+  const e=ev[pay];assert.ok(e.type==="pay"&&e.karma&&e.from===p.id&&e.to===v.id&&e.paid===1);
+  assert.equal(p.tickets,2,"the basher pays");assert.equal(v.tickets,4,"the Karma driver collects");
+  const knock=ev.find(x=>x.type==="travel"&&x.actor===v.id&&x.knock);assert.ok(knock&&knock.type==="travel"&&knock.path.at(-1)!.pos>6,"bounced forward");
+  audit(g,"karma");
+});
+test("Karma Bash against Rusty or a broke basher: the bank pays",()=>{
+  const g=fresh(2);g.condition="free";g.rusty=6;const [a,v]=g.players;v.pos=5;a.pos=20;
+  const k=g.eventDeck.find(c=>c.kind==="M11")!;g.eventDeck=g.eventDeck.filter(c=>c!==k);k.available=0;v.held.push(k);
+  a.hand[0].value=1;v.hand[0].value=2;
+  const round=g.round;for(const p of g.players)submitPick(g,p.id,{primary:p.hand[0].id},round,()=>0,1001);
+  const pay=g.replay!.events.find(e=>e.type==="pay");
+  if(pay&&pay.type==="pay"&&pay.karma){assert.equal(pay.from,"rusty");assert.equal(pay.bank,1);}
+  audit(g,"karma rusty");
 });

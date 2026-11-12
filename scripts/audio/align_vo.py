@@ -29,6 +29,9 @@ EXTRA = {  # pronunciations for words the CMU dictionary lacks
     "carnie": "K AA R N IY",
     "knockback": "N AA K B AE K",
     "knockbacks": "N AA K B AE K S",
+    "raygun": "R EY G AH N",
+    "punxsutawney": "P AH NG K S AH T AO N IY",
+    "em": "AH M",
 }
 REPLACE = {"tilt-a-whirl": "tilt a whirl", "bumper-to-bumper": "bumper to bumper"}
 
